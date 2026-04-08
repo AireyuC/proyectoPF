@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Search, UserPlus, Phone, Star, Pencil, History, User } from 'lucide-react';
 import { createWhatsAppLink, formatMoney } from '../../../utils/format';
 import type { Client } from '../types';
