@@ -1,5 +1,5 @@
 services:
-  db_Pfix:
+  db_pfix:
     image: postgres:15-alpine
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -11,7 +11,7 @@ services:
       - "5432:5432"
     restart: always
 
-  backend_Pfix:
+  backend_pfix:
     build: ./phone-fix-backend
     command: >
       sh -c "python manage.py makemigrations &&
@@ -24,10 +24,10 @@ services:
     env_file:
       - ./phone-fix-backend/.env
     depends_on:
-      - db_Pfix
+      - db_pfix
     restart: always
 
-  frontend_Pfix:
+  frontend_pfix:
     build: ./phone-fix-frontend
     volumes:
       - ./phone-fix-frontend:/app
@@ -35,7 +35,7 @@ services:
     ports:
       - "5173:5173"
     depends_on:
-      - backend_Pfix
+      - backend_pfix
     restart: always
 
 volumes:

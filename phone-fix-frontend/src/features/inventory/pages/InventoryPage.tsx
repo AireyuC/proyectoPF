@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, Plus, Package, AlertCircle, TrendingUp, Pencil, Archive, DollarSign, AlertTriangle } from 'lucide-react';
+import { useState } from 'react';
+import { Search, Plus, Package, AlertCircle, Pencil, Archive, DollarSign, AlertTriangle } from 'lucide-react';
 import { formatMoney } from '../../../utils/format';
 import { ProductFormModal } from '../components/ProductFormModal';
 

@@ -1,4 +1,5 @@
 import strawberry
+from .auth_graphql import AuthMutation
 
 @strawberry.type
 class Query:
@@ -6,4 +7,8 @@ class Query:
     def hello(self) -> str:
         return "Conexión a GraphQL exitosa (Phone Fix)"
 
-schema = strawberry.Schema(query=Query)
+@strawberry.type
+class Mutation(AuthMutation):
+    pass
+
+schema = strawberry.Schema(query=Query, mutation=Mutation)

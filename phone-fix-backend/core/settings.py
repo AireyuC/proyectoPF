@@ -27,6 +27,13 @@ INSTALLED_APPS = [
     "corsheaders",
     "strawberry_django",
     # Apps (Se agregarán acá)
+    "common",
+    "clients",
+    "inventory",
+    "reception",
+    "sales",
+    "staff",
+    "workshop",
 ]
 
 MIDDLEWARE = [
@@ -90,3 +97,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # CORS
 CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=["http://localhost:5173", "http://localhost:3000"])
+
+# Custom User Model
+AUTH_USER_MODEL = 'staff.User'
+
+# JWT Configuration
+JWT_SECRET_KEY = SECRET_KEY
+JWT_ALGORITHM = 'HS256'
+JWT_EXPIRATION_DELTA_DAYS = 7

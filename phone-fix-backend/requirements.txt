@@ -3,3 +3,4 @@ strawberry-graphql-django
 psycopg2-binary
 django-environ
 django-cors-headers
+PyJWT>=2.8.0

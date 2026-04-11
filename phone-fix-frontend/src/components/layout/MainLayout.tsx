@@ -1,17 +1,23 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { Wrench, Smartphone, Users, DollarSign, ClipboardList, Search } from 'lucide-react';
+import { Wrench, Smartphone, Users, DollarSign, ClipboardList, Search, LogOut } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 const MainLayout = () => {
     const location = useLocation();
+    const { logout, user } = useAuth();
 
-    const menuItems = [
-        { path: '/', label: 'Recepción', icon: <ClipboardList size={22} /> },
-        { path: '/taller', label: 'Taller Activo', icon: <Wrench size={22} /> },
-        { path: '/inventario', label: 'Inventario', icon: <Smartphone size={22} /> },
-        { path: '/ventas', label: 'Caja & Ventas', icon: <DollarSign size={22} /> },
-        { path: '/caja', label: 'Cierre de Caja', icon: <DollarSign size={22} /> },
-        { path: '/clientes', label: 'Clientes', icon: <Users size={22} /> },
+    const baseMenuItems = [
+        { path: '/', label: 'Recepción', icon: <ClipboardList size={22} />, adminOnly: false },
+        { path: '/taller', label: 'Taller Activo', icon: <Wrench size={22} />, adminOnly: false },
+        { path: '/inventario', label: 'Inventario', icon: <Smartphone size={22} />, adminOnly: false },
+        { path: '/ventas', label: 'Caja & Ventas', icon: <DollarSign size={22} />, adminOnly: true },
+        { path: '/caja', label: 'Cierre de Caja', icon: <DollarSign size={22} />, adminOnly: true },
+        { path: '/clientes', label: 'Clientes', icon: <Users size={22} />, adminOnly: true },
     ];
+
+    const menuItems = baseMenuItems.filter(item => 
+        !item.adminOnly || user?.role === 'ADMIN'
+    );
 
     return (
         <div className="flex h-screen bg-slate-50 font-sans text-slate-600">
@@ -49,15 +55,30 @@ const MainLayout = () => {
                 </nav>
 
                 <div className="p-4 border-t border-slate-50 mx-4 mb-4">
-                    <div className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-teal-400 to-cyan-300 flex items-center justify-center text-white font-bold shadow-md">
-                            A
+                    <div className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors relative group">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-teal-400 to-cyan-300 flex items-center justify-center text-white font-bold shadow-md uppercase">
+                            {user?.role ? user.role.charAt(0) : 'U'}
                         </div>
-                        <div className="hidden md:block">
-                            <p className="text-sm font-bold text-slate-700">Admin</p>
-                            <p className="text-xs text-teal-500 font-medium">Sucursal Montero</p>
+                        <div className="hidden md:block flex-1">
+                            <p className="text-sm font-bold text-slate-700 capitalize">{user?.role?.toLowerCase() || 'Usuario'}</p>
+                            <p className="text-xs text-teal-500 font-medium">Sucursal Local</p>
                         </div>
+                        <button 
+                            onClick={logout}
+                            title="Cerrar Sesión"
+                            className="hidden md:flex opacity-0 group-hover:opacity-100 absolute right-2 bg-red-50 text-red-500 p-2 rounded-lg hover:bg-red-100 transition-all cursor-pointer"
+                        >
+                            <LogOut size={16} />
+                        </button>
                     </div>
+                    {/* Botón Logout visible en celular */}
+                    <button 
+                        onClick={logout}
+                        title="Cerrar Sesión"
+                        className="md:hidden mt-2 mx-auto flex items-center justify-center bg-red-50 text-red-500 p-2 rounded-lg hover:bg-red-100 transition-all cursor-pointer w-10 h-10"
+                    >
+                        <LogOut size={18} />
+                    </button>
                 </div>
             </aside>
 
