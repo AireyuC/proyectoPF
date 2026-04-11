@@ -3,7 +3,11 @@ import { setContext } from '@apollo/client/link/context';
 
 // URL del backend GraphQL
 const httpLink = createHttpLink({
-  uri: 'http://localhost:8000/graphql/',
+  // Descomenta la siguiente línea para trabajar de manera Local:
+  // uri: 'http://localhost:8000/graphql/',
+  
+  // IP del Servidor Desplegado:
+  uri: 'http://95.111.245.9:8000/graphql/',
 });
 
 // Link de autenticación para inyectar el JWT en cada petición
