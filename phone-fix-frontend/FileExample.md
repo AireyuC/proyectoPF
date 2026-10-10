@@ -1,1 +1,0 @@
-﻿Se puede usar Codex.

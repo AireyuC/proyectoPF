@@ -1,13 +1,9 @@
 import { ApolloClient, InMemoryCache, createHttpLink } from '@apollo/client';
 import { setContext } from '@apollo/client/link/context';
 
-// URL del backend GraphQL
+// URL del backend GraphQL obtenida dinámicamente de las variables de entorno
 const httpLink = createHttpLink({
-  // Descomenta la siguiente línea para trabajar de manera Local:
-  // uri: 'http://localhost:8000/graphql/',
-  
-  // IP del Servidor Desplegado:
-  uri: 'http://95.111.245.9:8000/graphql/',
+  uri: import.meta.env.VITE_API_URL || 'http://localhost:8000/graphql/',
 });
 
 // Link de autenticación para inyectar el JWT en cada petición
@@ -21,7 +17,7 @@ const authLink = setContext((_, { headers }) => {
       ...headers,
       authorization: token ? `Bearer ${token}` : "",
     }
-  }
+  };
 });
 
 // Inicializamos el cliente

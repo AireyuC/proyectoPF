@@ -3,17 +3,18 @@
 ## 1. Visión del Producto
 **PhoneFix** es una solución integral de software diseñada para digitalizar, ordenar y potenciar la operación de talleres de reparación técnica de celulares y tiendas de accesorios/repuestos móviles.
 
-El sistema fue diseñado pensando en las particularidades operativas del mercado latinoamericano, y específicamente de **Bolivia**:
+El sistema está modelado a partir de la operación real del mercado boliviano (específicamente en **Montero / Santa Cruz**):
 * **Moneda nativa:** Bolivianos (Bs. / BOB).
-* **Identificación:** Carnet de Identidad (CI / NIT con extensión de departamento).
-* **Comunicación ágil:** Canales directos a WhatsApp móvil (`+591`) para avisos de presupuesto y finalización de reparaciones.
-* **Dinámica comercial mixta:** Talleres que tienen stock propio de repuestos pero que también compran piezas por encargo a proveedores locales cercanos en el mercado informal/comercial.
+* **Identificación:** Carnet de Identidad (CI / NIT con extensión).
+* **Canales de cobro:** Pagos bicanal en tiempo real (**Efectivo** y **QR bancario / Transferencia**), admitiendo pagos divididos.
+* **Garantía comercial:** Garantía estándar predeterminada de **3 semanas** para cualquier trabajo técnico efectivamente reparado, computada a partir de la **fecha de retiro del equipo**, con flexibilidad total de personalización por parte de la administración.
+* **Política de Abandono (Regla de 3 Meses):** Dispositivos no recogidos por más de 90 días pasan a ser activos del taller, sujetos a cambio de estado y venta libre por parte del Administrador a cualquier precio.
+* **Almacenamiento de evidencias y comprobantes:** Integración con **MinIO** (Object Storage S3) para fotografías de estado físico del equipo, capturas de pagos QR y facturas/recibos en PDF.
+* **Directorio de Proveedores y Casetas:** Registro de comercios externos locales (*Dr. Phone SCZ*, *Sandro*, *Señor GadDet*, *Arnold*, *Carlos*) con datos de mercado, caseta y contacto.
 
 ---
 
 ## 2. Actores y Permisos (Sistema de Roles)
-
-El sistema implementa dos roles principales diferenciados tanto a nivel de backend como de frontend:
 
 ```mermaid
 graph LR
@@ -25,120 +26,140 @@ graph LR
     subgraph Modulos Compartidos
         R1[Recepción de Órdenes]
         R2[Taller Activo / Reparaciones]
-        R3[Inventario de Repuestos]
+        R3[Inventario de Repuestos Consulta]
+        R4[Venta POS por Catálogo Oficial]
     end
 
     subgraph Modulos Exclusivos Admin
-        A1[Punto de Venta - POS]
-        A2[Cierre y Arqueo de Caja]
-        A3[Cartera de Clientes & Historial]
-        A4[Márgenes de Ganancia y Costos Privados]
+        A1[Venta Libre / Manual al Aire]
+        A2[Personalización de Garantías Especiales]
+        A3[Declarar Abandono y Venta de Activos > 3 Meses]
+        A4[Cierre y Arqueo de Caja]
+        A5[Gestión de Proveedores y Directorio]
+        A6[Márgenes de Ganancia y Costos Privados]
     end
 
     STAFF --> R1
     STAFF --> R2
     STAFF --> R3
+    STAFF --> R4
 
     ADMIN --> R1
     ADMIN --> R2
     ADMIN --> R3
+    ADMIN --> R4
     ADMIN --> A1
     ADMIN --> A2
     ADMIN --> A3
     ADMIN --> A4
+    ADMIN --> A5
+    ADMIN --> A6
 ```
-
-### Rol: `STAFF` (Técnicos y Recepcionistas)
-* **Recepción:** Recibir dispositivos de clientes, asentar la falla, dibujar el patrón de desbloqueo, registrar señas económicas y generar tickets de servicio.
-* **Taller:** Visualizar la lista de dispositivos asignados o en cola, cambiar el estado del trabajo, agregar notas técnicas y registrar repuestos utilizados.
-* **Inventario (Lectura/Consulta):** Ver disponibilidad de piezas y precios públicos de repuestos.
-
-### Rol: `ADMIN` (Dueño del Negocio / Encargado de Tienda)
-* Posee todos los permisos del rol `STAFF`.
-* **Ventas (POS):** Cobro directo por mostrador de accesorios, protectores y repuestos sueltos.
-* **Caja:** Control de la base inicial de caja, monitoreo de entradas (ventas + taller), registro de egresos/gastos y arqueo de caja diario.
-* **Clientes:** Ver métricas de clientes (fidelización, gasto histórico, clasificación de clientes VIP o revendedores).
-* **Costos y Finanzas:** Acceso al precio de costo real de los productos y cálculo de rentabilidad del stock.
 
 ---
 
 ## 3. Módulos y Flujos de Trabajo
 
 ### A. Recepción de Equipos y Registro de Orden
-Es el punto de entrada de los dispositivos al negocio:
-1. **Datos del Cliente:** Nombre completo, teléfono celular (WhatsApp) y CI/NIT opcional.
-2. **Datos del Equipo:** Marca (Samsung, Apple, Xiaomi, Motorola, etc.), Modelo (ej. A50, iPhone 11, Redmi Note 9) y Color.
-3. **Seguridad y Acceso al Dispositivo:** 
-   * **Patrón de desbloqueo táctil interactivo:** Componente gráfico tipo Android (`PatternLock`) que graba la secuencia de 9 puntos.
-   * **PIN numérico / Contraseña alfanumérica.**
-4. **Inspección Física y Falla:** Falla declarada por el cliente y checklist de estado físico previo (Pantalla rota, mojado, no enciende, tapa rota, sin señal) para deslindar responsabilidades por daños previos.
-5. **Aspecto Económico Inicial:** Precio estimado cotizado y monto dejado a cuenta/seña (en Bs.).
+Punto de entrada técnico y legal del dispositivo:
+1. **Datos del Cliente:**
+   * Nombre completo y C.I.
+   * **Celular principal (WhatsApp)**.
+   * **Teléfono de Referencia (`Telf./Ref.`):** Segundo número de contacto esencial si el celular del cliente se queda apagado en el taller.
+2. **Datos del Equipo:**
+   * Marca (*Samsung*, *Apple*, *Xiaomi*, *Tecno*, *Infinix*, etc.), Modelo (*A12*, *13 Pro Max*, *Spark Go 1*) y Color.
+   * **IMEI (Opcional):** El campo IMEI existe pero **no es obligatorio** (muchos equipos ingresan apagados o con display muerto).
+   * **Seguridad de Acceso:** Patrón gráfico de 9 puntos (`PatternLock`) o PIN numérico.
+3. **Inspección Física y Evidencia Fotográfica:**
+   * Checklist físico previo (Pantalla rota, mojado, no enciende, tapa rota).
+   * **Subida de Fotos a MinIO:** Respaldo visual del estado físico para evitar reclamos.
+4. **Aspecto Económico Inicial:**
+   * Presupuesto estimado cotizado.
+   * Monto a cuenta / seña (registrado en Efectivo o QR).
+   * Fecha de entrega prometida.
 
 ---
 
-### B. Gestión de Taller (Workshop) y Ciclo de Vida de la Reparación
-El ciclo de vida del dispositivo sigue una máquina de estados:
+### B. Gestión de Taller: Separación de Técnica, Custodia y Política de Abandono
+
+La orden maneja dos dimensiones paralelas: **Resultado Técnico** y **Custodia Física del Dispositivo**.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> RECIBIDO: Ingreso en Recepción
-    RECIBIDO --> DIAGNOSTICO: Técnico inicia revisión
-    DIAGNOSTICO --> ESPERA_CLIENTE: Requiere aprobación / cotización
-    ESPERA_CLIENTE --> EN_PROCESO: Cliente autoriza
-    DIAGNOSTICO --> EN_PROCESO: Reparación directa
-    EN_PROCESO --> TERMINADO: Trabajo completado
-    TERMINADO --> ENTREGADO: Retiro y liquidación final
-    ENTREGADO --> [*]
+    state "1. Dimensión Técnica" as Tecnica {
+        [*] --> DIAGNOSTICO: Ingreso a mesa
+        DIAGNOSTICO --> EN_PROCESO: Autorizado
+        EN_PROCESO --> REPARADO_EXITO: Reparación concluida
+        EN_PROCESO --> NO_REPARABLE: Sin repuesto / Daño irreversible
+        DIAGNOSTICO --> RECHAZADO: Cliente no aceptó presupuesto
+    }
+
+    state "2. Dimensión de Custodia" as Custodia {
+        EN_TALLER --> LISTO_EN_ESPERA: Trabajo terminado o suspendido
+        LISTO_EN_ESPERA --> RETIRADO_ENTREGADO: Cliente retira y liquida
+        LISTO_EN_ESPERA --> DEVUELTO_SIN_ARREGLO: Cliente retira sin arreglar
+        LISTO_EN_ESPERA --> DECLARADO_ABANDONO: > 3 Meses (Acción Exclusiva ADMIN)
+        DECLARADO_ABANDONO --> A_LA_VENTA: Pasa a inventario de activos del taller
+    }
 ```
 
-#### Imputación de Repuestos y Costos (Detalle Operativo Clave):
-En la pantalla de detalle de reparación (`RepairDetailModal`), el técnico puede asociar repuestos con dos orígenes distintos:
-1. **Origen Interno (`INTERNAL`):** El repuesto se toma del inventario del taller. Se conoce el costo interno y se carga al precio final del cliente.
-2. **Origen Externo (`EXTERNAL`):** Repuesto comprado en la calle a un distribuidor o tienda externa:
-   * Nombre del proveedor externo (`supplier`).
-   * Costo real pagado por la pieza.
-   * Precio a cobrar al cliente.
-   * Estado de pago al proveedor (`isPaid`: si el taller ya liquidó la pieza al proveedor o la sacó a consignación/crédito).
-3. **Mano de Obra (Labor Cost):** Cobro añadido por el servicio técnico.
-4. **Notificación Instantánea por WhatsApp:** Botón que abre directamente la API de WhatsApp con un mensaje prefabricado para el cliente con el estado actual del equipo.
+#### Reglas de Negocio en Taller:
+
+1. **Garantía del Trabajo:**
+   * **Condición de activación:** Solo se otorga si el equipo fue **efectivamente REPARADO**. Si no se arregló, la garantía es NULA.
+   * **Plazo predeterminado:** **`3 semanas` fijo** de forma automática.
+   * **Cómputo temporal:** Corre estrictamente a partir de la **Fecha de Retiro / Entrega en mano del cliente**.
+   * **Excepciones de Administración:** El Administrador puede modificarla a `SIN GARANTIA` (para placas mojadas/térmicas), `3 MESES` (pantallas OLED/originales) o días personalizados.
+
+2. **Política de Abandono (> 3 Meses) y Absorción como Activo:**
+   * Si un equipo permanece en custodia del taller por **más de 90 días (3 meses)** sin ser retirado por el cliente:
+     * El sistema muestra una alerta destacada: *"Equipo con plazo vencido (> 90 días)"*.
+     * **Autorización Estricta:** Se requiere que el **Administrador** autorice y cambie el estado a `DECLARADO_ABANDONO`.
+     * **Conversión en Activo Comercial:** Una vez cambiado el estado, el teléfono pasa a ser legal y contablemente parte de los **activos del taller**.
+     * **Venta Libre:** El mismo Administrador tiene la potestad de publicarlo a la venta en el POS o tienda **a cualquier precio que decida** (como teléfono usado reacondicionado o para desarme de repuestos).
+
+3. **Cálculo de Ganancia Neta y Caja Chica:**
+   * Costo real pagado en Caja Chica por el repuesto.
+   $$\text{Ganancia Neta} = \text{Total Cobrado} - \text{Caja Chica}$$
+
+4. **Observaciones Técnicas:** Campo libre para registrar anotaciones críticas (*"Con transplante de EPROM"*, *"Precio bajo acordado"*).
 
 ---
 
-### C. Inventario y Control de Repuestos
-* **Categorías:** `REPUESTO`, `ACCESORIO`, `HERRAMIENTA`, `OTRO`.
-* **Doble precio:**
-  * `costPrice`: Cuánto costó la pieza al negocio (protegido para administradores).
-  * `salePrice`: Precio al público.
-* **Control de Stock Mínimo:** Alerta visual de reabastecimiento cuando `stock <= minStock`.
-* **KPIs en tiempo real:** Total de productos catalogados, capital invertido total (Sumatoria de `stock * costPrice`) y cantidad de ítems críticos.
+### C. Directorio y Formulario de Proveedores (`Supplier`)
+
+Para reflejar la dinámica de compras de repuestos en centros comerciales y mercados (Comercial Chiriguano, Montero, La Ramada):
+
+* **Nombre de la Tienda o Proveedor:** **Único campo obligatorio**. Este es el que se muestra en el desplegable de compras de taller.
+* **Campos Opcionales Enriquecedores (Editables):**
+  * **Lugar / Mercado:** Ej. *"Comercial Chiriguano"*, *"Mercado Central Montero"*.
+  * **Nº de Caseta / Local / Pasillo:** Ej. *"Caseta #14, Pasillo B"*.
+  * **Dirección exacta:** Texto libre.
+  * **Nombre del Técnico / Encargado de Tienda:** Persona de contacto directo.
+  * **Celular / WhatsApp de Referencia:** Enlace directo para consultar stock y precios por chat.
+  * **Especialidad o Notas:** Ej. *"Trae repuestos de iPhone y pantallas OLED"*.
+* **Creación Ágil:** Al registrar un repuesto en taller, si el proveedor no está en la lista, se cuenta con un botón `+ Nuevo Proveedor` que abre un formulario rápido sin abandonar la orden.
 
 ---
 
-### D. Punto de Venta (POS - Caja Rápida)
-* Diseñado para la venta rápida de accesorios de mostrador (vidrios templados, cargadores, cables USB, fundas, audífonos).
-* Buscador de productos en tiempo real.
-* Carrito interactivo con modificación de cantidades al vuelo.
-* Cálculo automático del total en Bs. y confirmación de pago (Efectivo o Tarjeta/Transferencia QR).
+### D. Estrategia de Inventario Progresivo (Venta Libre vs Stock Estricto)
+
+Para evitar frenar la operación diaria:
+
+1. **Fase Inicial (Inventario Inactivo para Control de Stock):**
+   * El sistema no bloquea ventas por stock cero.
+   * **Venta Libre al Aire (Exclusiva ADMIN):** El Administrador puede ingresar productos manuales, servicios express o precios libres tiroteados al instante. Los empleados `STAFF` solo pueden vender artículos catalogados.
+   * **Poblamiento Orgánico:** Cada venta manual permite marcar `[x] Guardar en catálogo` para ir construyendo el inventario real a partir de las ventas diarias.
+2. **Fase Futura (Inventario Físico Activo):**
+   * Una vez contadas las existencias, se activa el control estricto de unidades y las alertas de stock bajo. La venta libre permanece en segundo plano reservada al Administrador.
 
 ---
 
-### E. Cierre de Caja Diario (Arqueo de Fondos)
-Garantiza la cuadratura financiera al finalizar la jornada:
-1. **Base Inicial:** Efectivo dejado en caja para cambio/sencillo.
-2. **Entradas:**
-   * Total recaudado por Ventas POS (+).
-   * Total recaudado por Cobro de Reparaciones (+).
-3. **Salidas / Gastos:**
-   * Registro de compras de repuestos en la calle, insumos o gastos operativos diarios (-).
-4. **Efectivo Esperado en Caja:**
-   $$\text{Efectivo Esperado} = \text{Base Inicial} + \text{Ventas POS} + \text{Reparaciones} - \text{Gastos}$$
-5. **Conteo Físico Real:** El encargado ingresa el monto físico contado en el cajón.
-6. **Balance:** Muestra en tiempo real la diferencia (+ sobrante, - faltante o exacto).
+### E. Cobro Bicanal (Efectivo y QR) y Arqueo de Caja
 
----
-
-### F. Cartera y Fidelización de Clientes
-* Registro histórico de visitas y reparaciones por cliente.
-* Métricas acumuladas: `totalRepairs` (cantidad de veces que trajo un celular) y `totalSpent` (monto total aportado al negocio).
-* Identificador **VIP**: Para revendedores, empresas o clientes frecuentes a los que se les aplica atención o precios especiales.
-* Búsqueda por Carnet (CI), Nombre o Números de Teléfono.
+* Toda orden o venta admite desglose simultáneo:
+  * **Monto en Efectivo (`payment_cash`):** Dinero físico en cajón.
+  * **Monto por QR / Transferencia (`payment_qr`):** Dinero acreditado en banco.
+* **Arqueo Diario Separado:**
+  1. **Caja Física:** $\text{Base} + \text{Ventas Efectivo} + \text{Reparaciones Efectivo} - \text{Salidas Caja Chica}$. Se contrasta contra el dinero contado en mano.
+  2. **Caja Virtual:** $\text{Ventas QR} + \text{Reparaciones QR}$. Se contrasta contra el extracto de la app bancaria.

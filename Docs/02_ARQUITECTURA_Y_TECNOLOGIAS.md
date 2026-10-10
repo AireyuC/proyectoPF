@@ -2,7 +2,7 @@
 
 ## 1. Diagrama de Arquitectura del Sistema
 
-El sistema implementa una arquitectura desacoplada **Cliente-Servidor (SPA + API GraphQL)** completamente contenerizada en Docker:
+El sistema implementa una arquitectura desacoplada **Cliente-Servidor (SPA + API GraphQL + Almacenamiento S3 MinIO)** completamente contenerizada en Docker:
 
 ```mermaid
 graph TB
@@ -35,10 +35,18 @@ graph TB
             PGData[("Volumen postgres_data")]
             Postgres --- PGData
         end
+
+        subgraph StorageContainer["Contenedor: minio_pfix"]
+            MinIO["MinIO Object Storage S3 (:9000 API / :9001 Web)"]
+            MinIOData[("Volumen minio_data")]
+            MinIO --- MinIOData
+        end
     end
 
     SPA -- "HTTP / GraphQL Queries & Mutations" --> DjangoApp
     DjangoORM -- "Conexión TCP / psycopg2" --> Postgres
+    DjangoApp -- "S3 SDK (boto3) Presigned URLs" --> MinIO
+    SPA -- "Subida directa de fotos y recibos" --> MinIO
 ```
 
 ---
@@ -58,7 +66,7 @@ graph TB
 
 ---
 
-### Backend
+### Backend y Almacenamiento
 | Componente | Tecnología | Versión / Detalle | Razón de Uso |
 | :--- | :--- | :--- | :--- |
 | **Lenguaje** | Python | `3.11-slim` | Rendimiento óptimo y soporte nativo tipado moderno. |
@@ -66,6 +74,8 @@ graph TB
 | **Motor GraphQL** | Strawberry GraphQL | `strawberry-graphql-django` | GraphQL moderno basado en `dataclasses` y type annotations de Python. |
 | **Motor de BD** | PostgreSQL | `15-alpine` | Base de datos relacional ACID para transaccionalidad de caja y stock. |
 | **Driver de BD** | `psycopg2-binary` | Driver nativo para PostgreSQL. | Conexión directa Django ORM - PostgreSQL. |
+| **Almacenamiento de Objetos** | **MinIO** | `minio/minio` (API S3 compatible) | Almacenamiento escalable de fotos de recepción, comprobantes QR y facturas/recibos en PDF. |
+| **SDK Almacenamiento** | `boto3` / `django-storages` | Cliente oficial S3 para Python | Generación de URLs prefirmadas seguras y manipulación de buckets. |
 | **Autenticación** | `PyJWT` | `>=2.8.0` | Generación y validación de tokens JWT sin estado. |
 | **Variables de Entorno**| `django-environ` | Lectura de `.env` estructurado. | Configuración 12-Factor App. |
 | **CORS** | `django-cors-headers` | Control de orígenes cruzados. | Permite peticiones desde el frontend local y remoto. |
@@ -90,10 +100,10 @@ sequenceDiagram
     GraphQL->>DB: authenticate(username, password)
     alt Credenciales Válidas
         DB-->>GraphQL: Retorna instancia User
-        GraphQL->>GraphQL: Genera JWT (user_id, role, exp=7 días)
-        GraphQL-->>Frontend: Retorna AuthPayload { token, userId, role }
-        Frontend->>AuthContext: login(token, userId, role)
-        AuthContext->>AuthContext: Guarda en localStorage (jwt_token, user_role, user_id)
+        GraphQL->>GraphQL: Genera JWT (user_id, role, permissions, exp=7 días)
+        GraphQL-->>Frontend: Retorna AuthPayload { token, userId, role, permissions }
+        Frontend->>AuthContext: login(token, userId, role, permissions)
+        AuthContext->>AuthContext: Guarda en localStorage (jwt_token, user_role, user_id, user_permissions)
         Frontend->>Usuario: Redirige a '/' (Dashboard)
     else Credenciales Inválidas
         GraphQL-->>Frontend: Retorna null / Error
@@ -112,19 +122,16 @@ sequenceDiagram
   ```
 * En el backend (`core/auth_graphql.py`), la función utilitaria `get_user_from_jwt(request)` decodifica el token con la clave secreta `JWT_SECRET_KEY` y obtiene el usuario autenticado desde `staff.models.User`.
 
-### Protección de Rutas en Frontend
-1. **`ProtectedRoute.tsx`:** Verifica si el usuario posee sesión (`isAuthenticated`). Si no, redirige inmediatamente a `/login`.
-2. **`AdminOnlyRoute.tsx`:** Verifica si `user.role === 'ADMIN'`. Si un usuario con rol `STAFF` intenta ingresar a `/ventas`, `/caja` o `/clientes`, es denegado o redirigido al inicio del panel.
-
 ---
 
 ## 4. Red y Configuración de Docker
 
-El archivo `docker-compose.yml` orquesta 3 servicios interconectados en la misma red:
+El archivo `docker-compose.yml` orquesta 4 servicios interconectados en la misma red:
 
 ```yaml
 services:
   db_pfix:         # Puerto 5432:5432 - Persistencia con volumen 'postgres_data'
+  minio_pfix:      # Puerto 9000 (API S3) y 9001 (Consola Web) - Volumen 'minio_data'
   backend_pfix:    # Puerto 8000:8000 - Montaje de volumen local para hot-reload
   frontend_pfix:   # Puerto 5173:5173 - Servidor Vite con host 0.0.0.0
 ```
@@ -133,3 +140,5 @@ services:
 * **8000:** Django Backend API (`/graphql/` y `/admin/`).
 * **5173:** Vite Frontend React (`http://localhost:5173`).
 * **5432:** PostgreSQL Database.
+* **9000:** MinIO S3 API Endpoint.
+* **9001:** MinIO Web Console Dashboard.

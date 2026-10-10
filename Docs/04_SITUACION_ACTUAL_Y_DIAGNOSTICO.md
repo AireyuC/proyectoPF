@@ -85,20 +85,15 @@ graph TD
 
 ---
 
-## 4. Deudas Técnicas y Desalineaciones Detectadas
+## 4. Deudas Técnicas y Estado de Corrección
 
 1. **Nombre erróneo de archivo de entorno:**
-   * Existe `phone-fix-frontend/.env.developmen` (le falta la **t** al final para ser reconocido por Vite como `.env.development`).
-2. **URL del backend quemada (Hardcoded) en Frontend:**
-   * En `phone-fix-frontend/src/lib/apolloClient.ts`, la variable `uri` está fija a la IP remota:
-     ```typescript
-     uri: 'http://95.111.245.9:8000/graphql/',
-     ```
-     En lugar de utilizar:
-     ```typescript
-     uri: import.meta.env.VITE_API_URL || 'http://localhost:8000/graphql/',
-     ```
-3. **Desalineación de Zona Horaria:**
-   * En `phone-fix-backend/core/settings.py` se tiene configurado `TIME_ZONE = "America/Caracas"`, mientras que el sistema fue concebido con formatos de moneda y teléfono de Bolivia (`America/La_Paz`).
-4. **Almacenamiento de fotos de recepción:**
-   * En la vista de recepción (`NewOrderPage`) existe el botón "Adjuntar Fotos", pero el backend aún no tiene configurado `django-storages` ni directorio de subida para archivos estáticos/media (`MEDIA_ROOT` y `MEDIA_URL`).
+   * ✅ **RESUELTO:** Renombrado a `phone-fix-frontend/.env.development` y creado `.env` maestro en la raíz.
+2. **URL del backend quemada en Frontend:**
+   * ✅ **RESUELTO:** En `phone-fix-frontend/src/lib/apolloClient.ts`, se dinamizó con `import.meta.env.VITE_API_URL`.
+3. **Almacenamiento de Fotos y Evidencias:**
+   * ✅ **RESUELTO EN INFRAESTRUCTURA:** Contenedor `minio_pfix` integrado a `docker-compose.yml` para almacenamiento privado S3.
+4. **Desalineación de Zona Horaria:**
+   * ⏳ **PENDIENTE EN CÓDIGO DJANGO:** En `phone-fix-backend/core/settings.py` cambiar `TIME_ZONE = "America/Caracas"` a `America/La_Paz` (se aplicará al iniciar Fase 2).
+5. **Reescritura de Modelos y Frontend:**
+   * ⏳ **PENDIENTE:** Modelar los campos en Django ORM y reescribir la UI de React 19 con la paleta oficial (Negro/Cian/Blanco).

@@ -1,6 +1,6 @@
 # 06. Guía de Ejecución y Despliegue
 
-Instrucciones para levantar el proyecto localmente y notas sobre la infraestructura del servidor VPS.
+Instrucciones para levantar el proyecto localmente mediante Docker Compose (con PostgreSQL, MinIO, Django y Vite) y notas sobre la infraestructura.
 
 ---
 
@@ -16,7 +16,7 @@ Instrucciones para levantar el proyecto localmente y notas sobre la infraestruct
 
 ## 2. Ejecución con Docker Compose (Recomendado)
 
-La forma más rápida y confiable de levantar todo el ecosistema (Base de datos, Backend y Frontend):
+Todo el ecosistema se gestiona a través del archivo centralizado [`.env`](file:///d:/proyectoPF/.env) en la raíz del proyecto.
 
 ### A. Iniciar los contenedores
 Desde la raíz del repositorio (`d:\proyectoPF`):
@@ -25,22 +25,25 @@ Desde la raíz del repositorio (`d:\proyectoPF`):
 docker-compose up --build
 ```
 
-Esto ejecutará automáticamente:
+Esto levantará automáticamente 4 servicios:
 1. `db_pfix`: Servidor PostgreSQL 15 en el puerto `5432`.
-2. `backend_pfix`: Ejecutará `python manage.py makemigrations && python manage.py migrate` y arrancará el servidor Django en el puerto `8000`.
-3. `frontend_pfix`: Instalará dependencias y levantará el dev server de Vite en el puerto `5173`.
+2. `minio_pfix`: Servidor MinIO Object Storage (API en `:9000` y Consola Web en `:9001`).
+3. `backend_pfix`: Ejecutará migraciones y arrancará el servidor Django en el puerto `8000`.
+4. `frontend_pfix`: Servidor de desarrollo Vite en el puerto `5173`.
+
+---
 
 ### B. Crear el Usuario Administrador Inicial
 Para poder iniciar sesión en la aplicación y en el panel de Django Admin:
 
 1. Abrir una nueva terminal.
-2. Identificar el nombre del contenedor de backend (habitualmente `proyectopf-backend_pfix-1` o revisar con `docker ps`).
+2. Identificar el contenedor de backend (`docker ps`).
 3. Ejecutar:
    ```bash
    docker exec -it proyectopf-backend_pfix-1 python manage.py createsuperuser
    ```
 4. Ingresar username, email y contraseña.
-5. Asignar el rol `ADMIN` ingresando a la shell de Django o al panel:
+5. Asignar el rol `ADMIN` ingresando a la shell de Django:
    ```bash
    docker exec -it proyectopf-backend_pfix-1 python manage.py shell
    ```
@@ -52,77 +55,56 @@ Para poder iniciar sesión en la aplicación y en el panel de Django Admin:
    exit()
    ```
 
+---
+
 ### C. URLs de Acceso Local
 * **Aplicación Web (Frontend):** [http://localhost:5173](http://localhost:5173)
 * **GraphQL Playground / Strawberry:** [http://localhost:8000/graphql/](http://localhost:8000/graphql/)
 * **Django Admin Panel:** [http://localhost:8000/admin/](http://localhost:8000/admin/)
+* **MinIO Web Console (S3 Storage):** [http://localhost:9001](http://localhost:9001)  
+  * *Usuario:* `admin`
+  * *Password:* `minioadmin123`
 
 ---
 
-## 3. Ejecución Manual en Entorno Local (Sin Docker)
+## 3. Configuración Maestra de Variables de Entorno (`.env`)
 
-Si prefieres ejecutar los servicios directamente en tu sistema operativo:
+El archivo `.env` en la raíz del repositorio gobierna todos los contenedores:
 
-### A. Base de Datos
-Tener una instancia de PostgreSQL corriendo con base de datos `postgres`, usuario `postgres` y contraseña `postgres` en el puerto `5432`.
-
-### B. Backend (`phone-fix-backend`)
-```bash
-cd phone-fix-backend
-python -m venv venv
-# En Windows Powershell:
-.\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python manage.py makemigrations
-python manage.py migrate
-python manage.py runserver 0.0.0.0:8000
-```
-
-### C. Frontend (`phone-fix-frontend`)
-```bash
-cd phone-fix-frontend
-npm install
-npm run dev
-```
-
----
-
-## 4. Configuración de Variables de Entorno
-
-### Backend (`phone-fix-backend/.env`)
 ```properties
+# Django Backend Core
 DEBUG=True
 SECRET_KEY=django-insecure-super-secret-key-for-dev-only
 ALLOWED_HOSTS=*
+TIME_ZONE=America/La_Paz
 
-# CORS para desarrollo local y VPS:
+# CORS
 CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000,http://95.111.245.9:5173
 
-# Base de datos (en docker el host es 'db_pfix', en localhost es 'localhost' o '127.0.0.1')
+# Base de Datos PostgreSQL
 DB_NAME=postgres
 DB_USER=postgres
 DB_PASSWORD=postgres
 DB_HOST=db_pfix
 DB_PORT=5432
-```
 
-### Frontend (`phone-fix-frontend/.env.development`)
-```properties
+# MinIO Object Storage
+MINIO_ROOT_USER=admin
+MINIO_ROOT_PASSWORD=minioadmin123
+MINIO_ENDPOINT=http://minio_pfix:9000
+MINIO_PUBLIC_ENDPOINT=http://localhost:9000
+MINIO_BUCKET_NAME=phonefix-media
+
+# Frontend Vite
 VITE_API_URL=http://localhost:8000/graphql/
-```
-
-### Frontend (`phone-fix-frontend/.env.production`)
-```properties
-VITE_API_URL=http://95.111.245.9:8000/graphql/
+VITE_MINIO_URL=http://localhost:9000
 ```
 
 ---
 
-## 5. Notas sobre el VPS y Producción
+## 4. Notas sobre el Servidor VPS y Producción
 
-En el historial del repositorio y en las configuraciones existen referencias al servidor VPS con IP **`95.111.245.9`**:
-* Dicha IP fue configurada en los orígenes permitidos de CORS en Django (`settings.py` y `.env`).
-* Para producción real se recomienda:
-  1. Asociar un dominio o subdominio DNS (ej. `app.phonefix.com` y `api.phonefix.com`).
-  2. Implementar un servidor Nginx como reverse proxy para gestionar certificados SSL vía Certbot (HTTPS / WSS).
-  3. No exponer el puerto de PostgreSQL `5432` a la red pública en el archivo `docker-compose.yml` en producción.
+* **IP Detectada:** En el código previo se encontraba configurada la IP `95.111.245.9`.
+* Para producción real:
+  1. Utilizar un proxy inverso con Nginx para gestionar certificados SSL Let's Encrypt (HTTPS / WSS).
+  2. Cerrar el puerto `5432` de PostgreSQL y `9001` de MinIO a la red pública (acceder solo mediante red interna de Docker).

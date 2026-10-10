@@ -16,6 +16,8 @@ El proyecto estuvo en pausa durante aproximadamente 6 meses (último commit regi
 | [**04. Situación Actual y Diagnóstico**](./04_SITUACION_ACTUAL_Y_DIAGNOSTICO.md) | Radiografía técnica del código actual: qué funciona, qué está simulado (Mocks), el desfase entre Backend y Frontend, y deudas técnicas detectadas. |
 | [**05. Roadmap y Plan de Reactivación**](./05_ROADMAP_Y_PLAN_DE_REACTIVACION.md) | Plan de acción paso a paso para completar el backend, conectar la API GraphQL con el frontend y llevar el sistema a producción. |
 | [**06. Guía de Ejecución y Despliegue**](./06_GUIA_DE_EJECUCION_Y_DESPLIEGUE.md) | Instrucciones para levantar el proyecto con Docker Compose en local o manualmente, variables de entorno y notas sobre el VPS. |
+| [**07. Estructura de Permisos (RBAC)**](./07_ESTRUCTURA_PERMISOS_RBAC.md) | Extracción del modelo dinámico de roles y permisos de COSMOL-Reportes y propuesta de implementación en PhoneFix (Django + Strawberry + React 19). |
+| [**08. Diseño Frontend y UI/UX**](./08_DISENO_FRONTEND_Y_UI_UX.md) | Sistema de diseño oficial (Negro/Cian/Blanco), corrección de pantalla completa y responsividad, y rediseño de vistas. |
 
 ---
 
