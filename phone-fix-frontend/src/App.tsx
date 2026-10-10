@@ -12,6 +12,7 @@ import { PosPage } from './features/sales/pages/PosPage';
 import { CashClosePage } from './features/sales/pages/CashClosePage';
 import { ClientsPage } from './features/clients/pages/ClientsPage';
 import { UsersPage } from './features/staff/pages/UsersPage';
+import { SuppliersPage } from './features/workshop/pages/SuppliersPage';
 
 function App() {
   return (
@@ -37,6 +38,11 @@ function App() {
             {/* Inventario */}
             <Route element={<PermissionRoute permission="inventario.productos.ver" />}>
               <Route path="inventario" element={<InventoryPage />} />
+            </Route>
+            
+            {/* Directorio de Proveedores y Casetas */}
+            <Route element={<PermissionRoute permission="taller.reparaciones.ver" />}>
+              <Route path="proveedores" element={<SuppliersPage />} />
             </Route>
             
             {/* Venta Mostrador (POS) */}

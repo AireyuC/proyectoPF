@@ -137,6 +137,12 @@ export const GET_REPAIR_ORDERS = gql`
       deliveryPromiseDate
       createdAt
       deliveredAt
+      daysInWorkshop
+      isAbandonmentEligible
+      invoiceNumber
+      invoicePdfKey
+      invoicePdfUrl
+      invoiceGeneratedAt
       parts {
         id
         name
@@ -192,6 +198,12 @@ export const GET_REPAIR_ORDER = gql`
       deliveryPromiseDate
       createdAt
       deliveredAt
+      daysInWorkshop
+      isAbandonmentEligible
+      invoiceNumber
+      invoicePdfKey
+      invoicePdfUrl
+      invoiceGeneratedAt
       parts {
         id
         name
@@ -337,6 +349,65 @@ export const CREATE_SUPPLIER = gql`
       name
       marketPlace
       boothNumber
+    }
+  }
+`;
+
+export const UPDATE_SUPPLIER = gql`
+  mutation UpdateSupplier($id: Int!, $input: SupplierInput!) {
+    updateSupplier(id: $id, input: $input) {
+      id
+      name
+      isInternal
+      marketPlace
+      boothNumber
+      address
+      contactName
+      phoneReference
+      notes
+    }
+  }
+`;
+
+export const DELETE_SUPPLIER = gql`
+  mutation DeleteSupplier($id: Int!) {
+    deleteSupplier(id: $id)
+  }
+`;
+
+export const UPDATE_REPAIR_QUOTE = gql`
+  mutation UpdateRepairQuote(
+    $ticketNumber: String!
+    $estimatedTotal: Float!
+    $technicianNotes: String
+    $status: String
+  ) {
+    updateRepairQuote(
+      ticketNumber: $ticketNumber
+      estimatedTotal: $estimatedTotal
+      technicianNotes: $technicianNotes
+      status: $status
+    ) {
+      id
+      ticketNumber
+      estimatedTotal
+      remainingBalance
+      status
+      statusDisplay
+      technicianNotes
+    }
+  }
+`;
+
+export const GENERATE_REPAIR_INVOICE = gql`
+  mutation GenerateRepairInvoice($ticketNumber: String!) {
+    generateRepairInvoice(ticketNumber: $ticketNumber) {
+      id
+      ticketNumber
+      invoiceNumber
+      invoicePdfKey
+      invoicePdfUrl
+      invoiceGeneratedAt
     }
   }
 `;

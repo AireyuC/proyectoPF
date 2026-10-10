@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { X, Store, ShoppingBag, Plus, RefreshCw } from 'lucide-react';
 import { ADD_REPAIR_PART, GET_SUPPLIERS, GET_PRODUCTS } from '../../../api/graphql';
+import { SupplierModal } from './SupplierModal';
 
 interface AddLineItemModalProps {
   isOpen: boolean;
@@ -24,8 +25,9 @@ export const AddLineItemModal: React.FC<AddLineItemModalProps> = ({
   const [supplierId, setSupplierId] = useState<number | null>(null);
   const [isPaid, setIsPaid] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
 
-  const { data: suppliersData } = useQuery<any>(GET_SUPPLIERS);
+  const { data: suppliersData, refetch: refetchSuppliers } = useQuery<any>(GET_SUPPLIERS);
   const { data: productsData } = useQuery<any>(GET_PRODUCTS);
 
   const [addPartMutation, { loading }] = useMutation<any>(ADD_REPAIR_PART, {
@@ -158,7 +160,16 @@ export const AddLineItemModal: React.FC<AddLineItemModalProps> = ({
             </div>
           ) : (
             <div className="space-y-1.5">
-              <label className="text-[#94A3B8] font-semibold">Proveedor / Caseta</label>
+              <div className="flex items-center justify-between">
+                <label className="text-[#94A3B8] font-semibold">Proveedor / Caseta</label>
+                <button
+                  type="button"
+                  onClick={() => setIsSupplierModalOpen(true)}
+                  className="text-[11px] text-[#F59E0B] hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus size={12} /> Nueva Caseta
+                </button>
+              </div>
               <select
                 value={supplierId || ''}
                 onChange={e => setSupplierId(parseInt(e.target.value) || null)}
@@ -231,6 +242,15 @@ export const AddLineItemModal: React.FC<AddLineItemModalProps> = ({
           </div>
 
         </form>
+
+        <SupplierModal
+          isOpen={isSupplierModalOpen}
+          onClose={() => setIsSupplierModalOpen(false)}
+          onSaved={(newSup) => {
+            refetchSuppliers();
+            if (newSup?.id) setSupplierId(newSup.id);
+          }}
+        />
 
       </div>
     </div>

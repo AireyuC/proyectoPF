@@ -117,6 +117,9 @@ class RepairOrder(models.Model):
     # --- Referencias MinIO (S3 Keys) ---
     initial_photo_key = models.CharField(max_length=255, blank=True, null=True, verbose_name="Clave MinIO Foto Recepción")
     payment_qr_receipt_key = models.CharField(max_length=255, blank=True, null=True, verbose_name="Clave MinIO Comprobante QR")
+    invoice_pdf_key = models.CharField(max_length=255, blank=True, null=True, verbose_name="Clave MinIO Comprobante PDF")
+    invoice_number = models.CharField(max_length=50, blank=True, null=True, verbose_name="Nº de Factura / Comprobante")
+    invoice_generated_at = models.DateTimeField(blank=True, null=True, verbose_name="Fecha de Generación de Factura")
 
     delivery_promise_date = models.DateField(blank=True, null=True, verbose_name="Fecha prometida de entrega")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Ingreso")

@@ -9,6 +9,12 @@ from .models import Supplier, Device, RepairOrder, RepairPartItem
 from clients.models import Client
 from inventory.models import Product
 from core.auth_graphql import get_user_from_jwt
+from .invoices import generate_repair_invoice_pdf, get_public_url
+
+@strawberry.type
+class BrandPresetType:
+    brand: str
+    models: List[str]
 
 @strawberry.type
 class SupplierType:
@@ -123,10 +129,19 @@ class RepairOrderType:
     delivery_promise_date: Optional[str]
     created_at: str
     delivered_at: Optional[str]
+    days_in_workshop: int
+    is_abandonment_eligible: bool
+    invoice_pdf_key: Optional[str]
+    invoice_number: Optional[str]
+    invoice_pdf_url: Optional[str]
+    invoice_generated_at: Optional[str]
     parts: List[RepairPartItemType]
 
     @classmethod
     def from_model(cls, o: RepairOrder) -> "RepairOrderType":
+        now = timezone.now()
+        days = (now - o.created_at).days if o.created_at else 0
+        is_abandonment_eligible = bool(days >= 90 and not o.delivered_at and not o.is_abandoned)
         return cls(
             id=o.id,
             ticket_number=o.ticket_number,
@@ -163,6 +178,12 @@ class RepairOrderType:
             delivery_promise_date=o.delivery_promise_date.isoformat() if o.delivery_promise_date else None,
             created_at=o.created_at.isoformat() if o.created_at else "",
             delivered_at=o.delivered_at.isoformat() if o.delivered_at else None,
+            days_in_workshop=days,
+            is_abandonment_eligible=is_abandonment_eligible,
+            invoice_pdf_key=o.invoice_pdf_key,
+            invoice_number=o.invoice_number,
+            invoice_pdf_url=get_public_url(o.invoice_pdf_key) if o.invoice_pdf_key else None,
+            invoice_generated_at=o.invoice_generated_at.isoformat() if o.invoice_generated_at else None,
             parts=[RepairPartItemType.from_model(p) for p in o.parts.all()]
         )
 
@@ -249,6 +270,21 @@ class WorkshopQuery:
         ).select_related('client', 'device')
         return [RepairOrderType.from_model(o) for o in qs]
 
+    @strawberry.field
+    def device_brand_presets(self) -> List[BrandPresetType]:
+        """Catálogo maestro de marcas y modelos populares en Montero, Santa Cruz"""
+        return [
+            BrandPresetType(brand="Samsung", models=["Galaxy A12", "Galaxy A13", "Galaxy A14", "Galaxy A03 Core", "Galaxy A04", "Galaxy A22", "Galaxy A32", "Galaxy A52", "Galaxy A54", "Galaxy S21", "Galaxy S22", "Galaxy S23"]),
+            BrandPresetType(brand="Apple", models=["iPhone 7", "iPhone 8", "iPhone X", "iPhone XR", "iPhone 11", "iPhone 11 Pro", "iPhone 12", "iPhone 12 Pro", "iPhone 13", "iPhone 13 Pro", "iPhone 14", "iPhone 15"]),
+            BrandPresetType(brand="Xiaomi", models=["Redmi 9", "Redmi 9A", "Redmi 10", "Redmi 10C", "Redmi 12", "Redmi Note 8", "Redmi Note 9", "Redmi Note 10", "Redmi Note 11", "Redmi Note 12", "Poco X3 Pro", "Poco X5"]),
+            BrandPresetType(brand="Motorola", models=["Moto E7", "Moto E20", "Moto E22", "Moto G20", "Moto G22", "Moto G30", "Moto G31", "Moto G52", "Moto G60", "Moto G84"]),
+            BrandPresetType(brand="Infinix", models=["Hot 10", "Hot 10 Lite", "Hot 11", "Hot 12", "Hot 20", "Hot 30", "Hot 40", "Smart 6", "Smart 7", "Note 12", "Note 30"]),
+            BrandPresetType(brand="Tecno Mobile", models=["Spark 6", "Spark 7", "Spark 8", "Spark 9", "Spark 10", "Spark 20", "Pova 4", "Pova 5", "Camon 19", "Camon 20"]),
+            BrandPresetType(brand="Honor", models=["Honor X6", "Honor X7", "Honor X8", "Honor 50", "Honor 70", "Honor 90", "Honor Magic 5 Lite"]),
+            BrandPresetType(brand="Huawei", models=["Y6", "Y7", "Y9", "Y9 Prime", "Nova 9", "Nova 10", "P30 Lite", "P40 Lite"]),
+            BrandPresetType(brand="Realme", models=["Realme C11", "Realme C21", "Realme C35", "Realme C53", "Realme C55", "Realme 8", "Realme 9"]),
+        ]
+
 @strawberry.type
 class WorkshopMutation:
     @strawberry.mutation
@@ -264,6 +300,30 @@ class WorkshopMutation:
             notes=input.notes
         )
         return SupplierType.from_model(s)
+
+    @strawberry.mutation
+    def update_supplier(self, id: int, input: SupplierInput) -> Optional[SupplierType]:
+        supplier = Supplier.objects.filter(id=id).first()
+        if not supplier:
+            return None
+        supplier.name = input.name
+        supplier.is_internal = input.is_internal
+        supplier.market_place = input.market_place
+        supplier.booth_number = input.booth_number
+        supplier.address = input.address
+        supplier.contact_name = input.contact_name
+        supplier.phone_reference = input.phone_reference
+        supplier.notes = input.notes
+        supplier.save()
+        return SupplierType.from_model(supplier)
+
+    @strawberry.mutation
+    def delete_supplier(self, id: int) -> bool:
+        supplier = Supplier.objects.filter(id=id).first()
+        if not supplier:
+            return False
+        supplier.delete()
+        return True
 
     @strawberry.mutation
     def create_repair_order(self, input: CreateRepairOrderInput) -> RepairOrderType:
@@ -440,4 +500,36 @@ class WorkshopMutation:
         if sale_price is not None:
             order.abandonment_sale_price = Decimal(str(sale_price))
         order.save()
+        return RepairOrderType.from_model(order)
+
+    @strawberry.mutation
+    def update_repair_quote(
+        self,
+        ticket_number: str,
+        estimated_total: float,
+        technician_notes: Optional[str] = None,
+        status: Optional[str] = None
+    ) -> Optional[RepairOrderType]:
+        """Permite fijar o actualizar el presupuesto cotizado tras el diagnóstico o consulta con casetas"""
+        order = RepairOrder.objects.filter(ticket_number=ticket_number).select_related('client', 'device', 'supplier').prefetch_related('parts').first()
+        if not order:
+            return None
+
+        order.estimated_total = Decimal(str(estimated_total))
+        if technician_notes is not None:
+            order.technician_notes = technician_notes
+        if status:
+            order.status = status
+        order.save()
+        return RepairOrderType.from_model(order)
+
+    @strawberry.mutation
+    def generate_repair_invoice(self, ticket_number: str) -> Optional[RepairOrderType]:
+        """Genera comprobante oficial con logo PhoneFix, sube a MinIO y actualiza la orden"""
+        order = RepairOrder.objects.filter(ticket_number=ticket_number).select_related('client', 'device', 'supplier').prefetch_related('parts').first()
+        if not order:
+            return None
+
+        generate_repair_invoice_pdf(order)
+        order.refresh_from_db()
         return RepairOrderType.from_model(order)

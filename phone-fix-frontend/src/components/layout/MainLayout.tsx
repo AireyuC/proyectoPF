@@ -12,7 +12,8 @@ import {
   Zap, 
   Activity,
   Receipt,
-  ShieldCheck
+  ShieldCheck,
+  Store
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -39,6 +40,12 @@ const MainLayout: React.FC = () => {
       label: 'Inventario', 
       icon: <Package size={20} />, 
       permission: 'inventario.productos.ver' 
+    },
+    { 
+      path: '/proveedores', 
+      label: 'Proveedores & Casetas', 
+      icon: <Store size={20} />, 
+      permission: 'taller.reparaciones.ver' 
     },
     { 
       path: '/ventas', 

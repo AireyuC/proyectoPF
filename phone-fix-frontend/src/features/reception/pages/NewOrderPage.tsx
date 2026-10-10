@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useMutation, useQuery } from '@apollo/client/react';
+import { gql } from '@apollo/client';
 import { 
   User, 
   Smartphone, 
@@ -9,11 +10,33 @@ import {
   RefreshCw,
   QrCode,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Wrench
 } from 'lucide-react';
 import { PatternLock } from '../../../components/common/PatternLock';
 import { CREATE_CLIENT, CREATE_REPAIR_ORDER, GET_CLIENTS } from '../../../api/graphql';
 import { formatMoney, createWhatsAppLink } from '../../../utils/format';
+
+const GET_DEVICE_BRAND_PRESETS = gql`
+  query GetDeviceBrandPresets {
+    deviceBrandPresets {
+      brand
+      models
+    }
+  }
+`;
+
+const DEFAULT_PRESETS = [
+  { brand: 'Samsung', models: ['Galaxy A12', 'Galaxy A13', 'Galaxy A14', 'Galaxy A03 Core', 'Galaxy A54', 'Galaxy S23'] },
+  { brand: 'Apple', models: ['iPhone 7', 'iPhone 8', 'iPhone X', 'iPhone 11', 'iPhone 12', 'iPhone 13', 'iPhone 14', 'iPhone 15'] },
+  { brand: 'Xiaomi', models: ['Redmi 9', 'Redmi 10', 'Redmi 12', 'Redmi Note 10', 'Redmi Note 11', 'Redmi Note 12', 'Poco X3'] },
+  { brand: 'Motorola', models: ['Moto E20', 'Moto E22', 'Moto G22', 'Moto G31', 'Moto G52', 'Moto G84'] },
+  { brand: 'Infinix', models: ['Hot 10', 'Hot 11', 'Hot 12', 'Hot 20', 'Hot 30', 'Smart 7', 'Note 30'] },
+  { brand: 'Tecno Mobile', models: ['Spark 7', 'Spark 8', 'Spark 9', 'Spark 10', 'Spark 20', 'Pova 5'] },
+  { brand: 'Honor', models: ['Honor X6', 'Honor X7', 'Honor X8', 'Honor 50', 'Honor 70', 'Honor 90'] },
+  { brand: 'Huawei', models: ['Y6', 'Y7', 'Y9', 'P30 Lite', 'Nova 9'] },
+  { brand: 'Realme', models: ['Realme C11', 'Realme C21', 'Realme C35', 'Realme C53', 'Realme C55'] },
+];
 
 const COMMON_CONDITIONS = [
   'Pantalla Rota / Táctil Dañado',
@@ -43,6 +66,7 @@ export const NewOrderPage: React.FC = () => {
   const [issueDescription, setIssueDescription] = useState('');
   
   // Finanzas y Seña Bicanal
+  const [isPendingQuote, setIsPendingQuote] = useState(false);
   const [estimatedTotal, setEstimatedTotal] = useState<number | ''>(0);
   const [depositCash, setDepositCash] = useState<number | ''>(0);
   const [depositQr, setDepositQr] = useState<number | ''>(0);
@@ -54,8 +78,15 @@ export const NewOrderPage: React.FC = () => {
 
   // Queries & Mutations
   const { refetch: refetchClients } = useQuery<any>(GET_CLIENTS, { variables: { search: '' } });
+  const { data: presetsData } = useQuery<any>(GET_DEVICE_BRAND_PRESETS);
   const [createClientMutation] = useMutation<any>(CREATE_CLIENT);
   const [createOrderMutation, { loading: creatingOrder }] = useMutation<any>(CREATE_REPAIR_ORDER);
+
+  const brandPresets = presetsData?.deviceBrandPresets || DEFAULT_PRESETS;
+  const currentBrandPreset = brandPresets.find(
+    (p: any) => p.brand.toLowerCase() === deviceBrand.trim().toLowerCase()
+  );
+  const availableModels = currentBrandPreset?.models || [];
 
   const toggleCondition = (cond: string) => {
     setSelectedConditions(prev => 
@@ -276,22 +307,34 @@ export const NewOrderPage: React.FC = () => {
                 <input
                   type="text"
                   required
+                  list="brands-list"
                   value={deviceBrand}
                   onChange={e => setDeviceBrand(e.target.value)}
                   placeholder="Ej. Samsung / iPhone"
                   className="w-full px-3.5 py-2.5 bg-[#131926] border border-[#1E293B] rounded-xl text-white placeholder-[#64748B] focus:border-[#00E5FF] outline-none"
                 />
+                <datalist id="brands-list">
+                  {brandPresets.map((p: any) => (
+                    <option key={p.brand} value={p.brand} />
+                  ))}
+                </datalist>
               </div>
               <div>
                 <label className="block text-[#94A3B8] font-semibold mb-1.5">Modelo *</label>
                 <input
                   type="text"
                   required
+                  list="models-list"
                   value={deviceModel}
                   onChange={e => setDeviceModel(e.target.value)}
                   placeholder="Ej. Galaxy A54"
                   className="w-full px-3.5 py-2.5 bg-[#131926] border border-[#1E293B] rounded-xl text-white placeholder-[#64748B] focus:border-[#00E5FF] outline-none"
                 />
+                <datalist id="models-list">
+                  {availableModels.map((m: string) => (
+                    <option key={m} value={m} />
+                  ))}
+                </datalist>
               </div>
             </div>
 
@@ -403,24 +446,73 @@ export const NewOrderPage: React.FC = () => {
             </div>
 
             <div className="space-y-4 text-xs">
-              {/* Presupuesto Total */}
-              <div>
-                <label className="block text-[#94A3B8] font-semibold mb-1.5">
-                  Presupuesto Estimado (Bs.)
+              {/* Modalidad de Cotización: Acordada vs Pendiente Diagnóstico */}
+              <div className="space-y-2">
+                <label className="block text-[#94A3B8] font-semibold">
+                  Modalidad de Cotización
                 </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value={estimatedTotal}
-                    onChange={e => setEstimatedTotal(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                    className="w-full px-3.5 py-3 bg-[#131926] border border-[#1E293B] rounded-xl text-white text-lg font-bold placeholder-[#64748B] focus:border-[#00E5FF] outline-none"
-                    placeholder="0.00"
-                  />
-                  <span className="absolute right-3.5 top-3.5 text-[#64748B] font-bold">Bs.</span>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-[#131926] border border-[#1E293B] rounded-xl text-[11px] font-bold">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsPendingQuote(false);
+                      if (estimatedTotal === 0) setEstimatedTotal('');
+                    }}
+                    className={`py-2 px-2 rounded-lg transition-all text-center cursor-pointer ${
+                      !isPendingQuote
+                        ? 'bg-[#00E5FF] text-black shadow-md shadow-[#00E5FF]/20 font-extrabold'
+                        : 'text-[#94A3B8] hover:text-white'
+                    }`}
+                  >
+                    Cotización Acordada
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsPendingQuote(true);
+                      setEstimatedTotal(0);
+                    }}
+                    className={`py-2 px-2 rounded-lg transition-all text-center cursor-pointer ${
+                      isPendingQuote
+                        ? 'bg-[#F59E0B] text-black shadow-md shadow-[#F59E0B]/20 font-extrabold'
+                        : 'text-[#94A3B8] hover:text-white'
+                    }`}
+                  >
+                    Pendiente Diagnóstico (Bs. 0)
+                  </button>
                 </div>
               </div>
+
+              {isPendingQuote ? (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-1">
+                  <div className="flex items-center gap-1.5 text-amber-300 font-bold text-xs">
+                    <Wrench size={13} />
+                    <span>Equipo Ingresa en Diagnóstico</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    Presupuesto fijado en <b>Bs. 0.00</b>. El técnico revisará el teléfono, consultará precios a las casetas y podrá ingresar el costo real en el Taller para avisar al cliente por WhatsApp.
+                  </p>
+                </div>
+              ) : (
+                /* Presupuesto Total Editable */
+                <div>
+                  <label className="block text-[#94A3B8] font-semibold mb-1.5">
+                    Presupuesto Total Cotizado (Bs.) *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={estimatedTotal}
+                      onChange={e => setEstimatedTotal(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                      className="w-full px-3.5 py-3 bg-[#131926] border border-[#1E293B] rounded-xl text-white text-lg font-bold placeholder-[#64748B] focus:border-[#00E5FF] outline-none"
+                      placeholder="0.00"
+                    />
+                    <span className="absolute right-3.5 top-3.5 text-[#64748B] font-bold">Bs.</span>
+                  </div>
+                </div>
+              )}
 
               {/* Seña Efectivo vs QR */}
               <div className="p-4 bg-[#131926] border border-[#1E293B] rounded-xl space-y-3">

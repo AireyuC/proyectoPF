@@ -133,19 +133,39 @@ export const WorkshopPage: React.FC = () => {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {orders.map((order: any) => (
-          <div
-            key={order.id}
-            onClick={() => handleOpenDetail(order)}
-            className="bg-[#0D121F] border border-[#1E293B] hover:border-[#00E5FF]/40 rounded-2xl p-5 space-y-4 cursor-pointer transition-all hover:glow-cyan-subtle group relative"
-          >
-            {/* Top row: Ticket & Badge */}
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-xs font-extrabold text-[#00E5FF] tracking-wider">
-                #{order.ticketNumber}
-              </span>
-              {getStatusBadge(order.status, order.statusDisplay)}
-            </div>
+        {orders.map((order: any) => {
+          const isOverdue = order.isAbandonmentEligible;
+
+          return (
+            <div
+              key={order.id}
+              onClick={() => handleOpenDetail(order)}
+              className={`border rounded-2xl p-5 space-y-4 cursor-pointer transition-all group relative ${
+                isOverdue
+                  ? 'bg-[#120B1C] border-purple-500/70 shadow-lg shadow-purple-500/20 hover:border-purple-400'
+                  : 'bg-[#0D121F] border-[#1E293B] hover:border-[#00E5FF]/40 hover:glow-cyan-subtle'
+              }`}
+            >
+              {/* Top row: Ticket & Badge */}
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="font-mono text-xs font-extrabold text-[#00E5FF] tracking-wider">
+                  #{order.ticketNumber}
+                </span>
+
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {isOverdue && (
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-purple-500/25 text-purple-300 border border-purple-500/50 animate-pulse">
+                      ⚠️ &gt;90d Abandono
+                    </span>
+                  )}
+                  {order.estimatedTotal === 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                      Bs. 0 (Diagnóstico)
+                    </span>
+                  )}
+                  {getStatusBadge(order.status, order.statusDisplay)}
+                </div>
+              </div>
 
             {/* Info Dispositivo */}
             <div className="space-y-1">
@@ -201,7 +221,8 @@ export const WorkshopPage: React.FC = () => {
             )}
 
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Modal de Detalle de Reparación */}
@@ -210,12 +231,12 @@ export const WorkshopPage: React.FC = () => {
         onClose={() => setIsDetailOpen(false)}
         order={selectedOrder}
         onRefresh={() => {
-          refetch();
-          if (selectedOrder) {
-            // Actualizar modal con datos refrescados
-            const updated = orders.find((o: any) => o.ticketNumber === selectedOrder.ticketNumber);
-            if (updated) setSelectedOrder(updated);
-          }
+          refetch().then(res => {
+            if (selectedOrder && res?.data?.repairOrders) {
+              const updated = res.data.repairOrders.find((o: any) => o.ticketNumber === selectedOrder.ticketNumber);
+              if (updated) setSelectedOrder(updated);
+            }
+          });
         }}
       />
 

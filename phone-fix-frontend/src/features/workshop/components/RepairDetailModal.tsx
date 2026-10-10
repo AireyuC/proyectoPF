@@ -1,12 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useMutation } from '@apollo/client/react';
 import { 
   Smartphone, 
   MessageCircle, 
   Plus, 
-  AlertTriangle,
-  CheckCircle,
-  XCircle
+  CheckCircle, 
+  XCircle, 
+  FileText, 
+  Printer, 
+  Check, 
+  DollarSign 
 } from 'lucide-react';
 import { Modal } from '../../../components/common/Modal';
 import { AddLineItemModal } from './AddLineItemModal';
@@ -14,7 +17,9 @@ import {
   UPDATE_REPAIR_STATUS, 
   DELIVER_REPAIR_ORDER, 
   REFUND_REPAIR_DEPOSIT, 
-  DECLARE_REPAIR_ABANDONMENT 
+  DECLARE_REPAIR_ABANDONMENT,
+  UPDATE_REPAIR_QUOTE,
+  GENERATE_REPAIR_INVOICE
 } from '../../../api/graphql';
 import { formatMoney, createWhatsAppLink } from '../../../utils/format';
 import { Can } from '../../../components/auth/Can';
@@ -35,9 +40,11 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
   const [activeTab, setActiveTab] = useState<'GENERAL' | 'REPUESTOS' | 'ENTREGA'>('GENERAL');
   const [isAddPartOpen, setIsAddPartOpen] = useState(false);
 
-  // Estados de edición rápida
+  // Estados de edición rápida y cotización
   const [techNotes, setTechNotes] = useState(order?.technicianNotes || '');
   const [techObs] = useState(order?.techObservations || '');
+  const [quoteAmount, setQuoteAmount] = useState<number | ''>(order?.estimatedTotal || 0);
+  const [quoteNotes, setQuoteNotes] = useState(order?.technicianNotes || '');
   
   // Estado de Liquidación / Entrega
   const [finalCash, setFinalCash] = useState<number | ''>(order?.remainingBalance || 0);
@@ -54,6 +61,18 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
   const [deliverMutation] = useMutation<any>(DELIVER_REPAIR_ORDER);
   const [refundMutation] = useMutation<any>(REFUND_REPAIR_DEPOSIT);
   const [abandonMutation] = useMutation<any>(DECLARE_REPAIR_ABANDONMENT);
+  const [updateQuoteMutation, { loading: updatingQuote }] = useMutation<any>(UPDATE_REPAIR_QUOTE);
+  const [generateInvoiceMutation, { loading: generatingInvoice }] = useMutation<any>(GENERATE_REPAIR_INVOICE);
+
+  useEffect(() => {
+    if (order) {
+      setTechNotes(order.technicianNotes || '');
+      setQuoteAmount(order.estimatedTotal || 0);
+      setQuoteNotes(order.technicianNotes || '');
+      setFinalCash(order.remainingBalance || 0);
+      setRefundCash(order.depositCash || 0);
+    }
+  }, [order]);
 
   if (!isOpen || !order) return null;
 
@@ -64,6 +83,27 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
         status: newStatus,
         technicianNotes: techNotes,
         techObservations: techObs
+      }
+    });
+    onRefresh?.();
+  };
+
+  const handleUpdateQuote = async (newStatus?: string) => {
+    await updateQuoteMutation({
+      variables: {
+        ticketNumber: order.ticketNumber,
+        estimatedTotal: Number(quoteAmount || 0),
+        technicianNotes: quoteNotes,
+        status: newStatus || order.status
+      }
+    });
+    onRefresh?.();
+  };
+
+  const handleGenerateInvoice = async () => {
+    await generateInvoiceMutation({
+      variables: {
+        ticketNumber: order.ticketNumber
       }
     });
     onRefresh?.();
@@ -97,7 +137,7 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
   };
 
   const handleAbandon = async () => {
-    if (confirm(`¿Confirmas declarar en ABANDONO el equipo ticket #${order.ticketNumber}? Pasará a ser activo de la empresa.`)) {
+    if (confirm(`¿Confirmas declarar en ABANDONO el equipo ticket #${order.ticketNumber}? Pasará a ser activo de la empresa para venta libre.`)) {
       await abandonMutation({
         variables: {
           ticketNumber: order.ticketNumber,
@@ -118,6 +158,38 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
     >
       <div className="space-y-6">
         
+        {/* ======================================================== */}
+        {/* BANNER GIGANTE REACTIVO SI LLEVA >= 90 DÍAS EN TALLER */}
+        {/* ======================================================== */}
+        {order.isAbandonmentEligible && !order.isAbandoned && (
+          <Can permission="taller.ordenes.declarar_abandono">
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-950/90 via-red-950/90 to-purple-950/90 border-2 border-purple-500 shadow-2xl shadow-purple-600/30 flex flex-col sm:flex-row items-center justify-between gap-4 animate-fade-in">
+              <div className="flex items-center gap-3">
+                <span className="w-3.5 h-3.5 rounded-full bg-red-500 animate-ping shrink-0" />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-md bg-red-500/20 text-red-300 text-[10px] font-black uppercase tracking-wider border border-red-500/30">
+                      Alerta de Abandono
+                    </span>
+                    <h4 className="text-sm font-black text-white">
+                      Equipo con {order.daysInWorkshop || 90} Días en Taller (Excede 3 Meses)
+                    </h4>
+                  </div>
+                  <p className="text-xs text-purple-200/80 mt-1">
+                    Superó los 90 días reglamentarios sin ser retirado. El Administrador puede absorberlo como activo para venta libre.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleAbandon}
+                className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-purple-600 to-red-600 hover:from-purple-500 hover:to-red-500 text-white font-black text-xs tracking-wider uppercase rounded-xl shadow-xl shadow-purple-600/40 animate-pulse transition active:scale-95 shrink-0 cursor-pointer"
+              >
+                Absorber como Activo
+              </button>
+            </div>
+          </Can>
+        )}
+
         {/* Header Superior del Equipo y Cliente */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-[#131926] border border-[#1E293B]">
           <div className="flex items-center gap-3.5">
@@ -132,6 +204,11 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#1E293B] text-[#94A3B8]">
                   {order.device?.color || 'Sin color'}
                 </span>
+                {order.invoiceNumber && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 font-mono">
+                    {order.invoiceNumber}
+                  </span>
+                )}
               </div>
               <p className="text-xs text-[#94A3B8] flex items-center gap-2 mt-0.5">
                 <span>Cliente: <strong className="text-white">{order.clientName}</strong></span>
@@ -141,7 +218,20 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Botón Discreto de Abandono (Solo si NO es crítico >= 90d) */}
+            {!order.isAbandonmentEligible && !order.isAbandoned && (
+              <Can permission="taller.ordenes.declarar_abandono">
+                <button
+                  onClick={handleAbandon}
+                  className="px-2.5 py-1.5 border border-slate-700/80 hover:border-purple-500/50 text-slate-400 hover:text-purple-300 text-[10px] font-semibold rounded-xl transition cursor-pointer"
+                  title="Declarar abandono anticipado"
+                >
+                  Abandono
+                </button>
+              </Can>
+            )}
+
             <select
               value={order.status}
               onChange={e => handleStatusChange(e.target.value)}
@@ -181,7 +271,7 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                 : 'border-transparent text-[#94A3B8] hover:text-white'
             }`}
           >
-            Diagnóstico & Falla
+            Diagnóstico & Cotización
           </button>
           <button
             onClick={() => setActiveTab('REPUESTOS')}
@@ -195,23 +285,138 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('ENTREGA')}
-            className={`pb-3 border-b-2 transition-all cursor-pointer ${
+            className={`pb-3 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'ENTREGA'
                 ? 'border-[#00E5FF] text-[#00E5FF]'
                 : 'border-transparent text-[#94A3B8] hover:text-white'
             }`}
           >
-            Liquidación & Retiro
+            Liquidación & Factura {order.invoicePdfUrl && <FileText size={12} className="text-cyan-400" />}
           </button>
         </div>
 
         {/* ======================================================== */}
-        {/* TAB 1: DIAGNÓSTICO Y CONDICIONES */}
+        {/* TAB 1: DIAGNÓSTICO Y COTIZACIÓN DIFERIDA */}
         {/* ======================================================== */}
         {activeTab === 'GENERAL' && (
           <div className="space-y-4 text-xs">
+
+            {/* PANEL DE COTIZACIÓN DINÁMICA (PERMITE FIJAR O CAMBIAR PRECIO) */}
+            <div className={`p-4 rounded-xl border transition-all ${
+              order.estimatedTotal === 0 || order.status === 'DIAGNOSTICO' || order.status === 'ESPERA_CLIENTE'
+                ? 'bg-amber-500/10 border-amber-500/30'
+                : 'bg-[#131926] border-cyan-500/30'
+            }`}>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className={`p-1.5 rounded-lg ${
+                    order.estimatedTotal === 0 ? 'bg-amber-500/20 text-amber-400' : 'bg-cyan-500/10 text-cyan-400'
+                  }`}>
+                    <DollarSign size={16} />
+                  </span>
+                  <div>
+                    <h4 className="font-bold text-white text-xs uppercase tracking-wide">
+                      Gestión de Presupuesto y Cotización
+                    </h4>
+                    <p className="text-[11px] text-slate-300">
+                      {order.estimatedTotal === 0 
+                        ? '⚠️ El equipo ingresó con Bs. 0 (Pendiente de Diagnóstico o Consulta a Proveedor).' 
+                        : 'Actualiza el monto cotizado cuando el proveedor confirme precios o si el cliente autoriza.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400">Presupuesto Registrado:</span>
+                  <span className="text-base font-black text-[#00E5FF]">
+                    {formatMoney(order.estimatedTotal)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                    Presupuesto Cotizado Real (Bs.)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={quoteAmount}
+                      onChange={e => setQuoteAmount(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                      placeholder="0.00"
+                      className="w-full px-3 py-2 bg-[#0D121F] border border-slate-700 focus:border-cyan-400 rounded-xl text-white font-bold text-sm outline-none"
+                    />
+                    <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">Bs.</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                    Trabajo / Pieza Cotizada (Para aviso al cliente)
+                  </label>
+                  <input
+                    type="text"
+                    value={quoteNotes}
+                    onChange={e => setQuoteNotes(e.target.value)}
+                    placeholder="Ej: Cambio de pantalla OLED + mano de obra"
+                    className="w-full px-3 py-2 bg-[#0D121F] border border-slate-700 focus:border-cyan-400 rounded-xl text-white text-xs outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Botones de Decisión y WhatsApp */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-800">
+                <a
+                  href={createWhatsAppLink(
+                    order.clientPhone, 
+                    `Hola ${order.clientName}, te escribimos de PhoneFix Montero. Ya revisamos tu equipo ${order.device?.brand} ${order.device?.model} (Ticket #${order.ticketNumber}). El presupuesto de reparación es de Bs. ${quoteAmount || 0} por ${quoteNotes || order.issueDescription}. Por favor indícanos si autorizas realizar el trabajo.`
+                  )}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3.5 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 font-bold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <MessageCircle size={14} />
+                  Enviar Cotización por WhatsApp
+                </a>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={updatingQuote}
+                    onClick={() => handleUpdateQuote('RECHAZADO_ESPERA')}
+                    className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 font-bold rounded-xl text-xs transition cursor-pointer"
+                    title="Marcar como rechazado"
+                  >
+                    ❌ Rechazó Presupuesto
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={updatingQuote}
+                    onClick={() => handleUpdateQuote('EN_PROCESO')}
+                    className="px-3.5 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-400 font-extrabold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer shadow-md"
+                    title="Actualizar monto y pasar a En Reparación"
+                  >
+                    <Check size={14} />
+                    ✅ Cliente Aceptó (En Reparación)
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={updatingQuote}
+                    onClick={() => handleUpdateQuote()}
+                    className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs transition cursor-pointer"
+                  >
+                    {updatingQuote ? 'Guardando...' : '💾 Guardar Cotización'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              
               {/* Falla declarada */}
               <div className="p-4 rounded-xl bg-[#131926] border border-[#1E293B] space-y-2">
                 <p className="text-[#94A3B8] font-bold uppercase tracking-wider text-[10px]">
@@ -238,7 +443,6 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                   {order.device?.passcode || 'Sin código registrado'}
                 </div>
               </div>
-
             </div>
 
             {/* Diagnóstico técnico */}
@@ -263,29 +467,6 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                 </button>
               </div>
             </div>
-
-            {/* Alerta de Abandono si lleva más de 3 meses */}
-            <Can permission="taller.ordenes.declarar_abandono">
-              <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle className="text-purple-400 shrink-0" size={20} />
-                  <div>
-                    <p className="font-bold text-purple-300">Gestión de Abandono (&gt; 90 Días)</p>
-                    <p className="text-[11px] text-purple-400">
-                      Si el equipo no es reclamado por más de 3 meses, el Administrador puede absorberlo como activo para venta.
-                    </p>
-                  </div>
-                </div>
-                {!order.isAbandoned && (
-                  <button
-                    onClick={handleAbandon}
-                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shrink-0"
-                  >
-                    Declarar Abandono
-                  </button>
-                )}
-              </div>
-            </Can>
 
           </div>
         )}
@@ -319,84 +500,139 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                     <th className="p-3">Cobrado a Cliente</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#1E293B] text-xs">
-                  {order.parts?.map((p: any) => (
-                    <tr key={p.id} className="hover:bg-[#131926]/50">
-                      <td className="p-3 font-semibold text-white">{p.name}</td>
-                      <td className="p-3">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          p.sourceType === 'INTERNAL' ? 'bg-[#00E5FF]/10 text-[#00E5FF]' : 'bg-[#F59E0B]/10 text-[#F59E0B]'
-                        }`}>
-                          {p.sourceType === 'INTERNAL' ? 'Almacén PhoneFix' : `Caseta (${p.supplierName || 'Calle'})`}
-                        </span>
-                      </td>
-                      <td className="p-3 text-[#94A3B8]">{formatMoney(p.cost)}</td>
-                      <td className="p-3 font-bold text-[#00E5FF]">{formatMoney(p.price)}</td>
-                    </tr>
-                  ))}
-                  {(!order.parts || order.parts.length === 0) && (
+                <tbody className="divide-y divide-[#1E293B]">
+                  {order.parts?.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="p-4 text-center text-[#64748B]">
-                        No hay piezas imputadas aún. Haz clic en "Agregar Pieza o Gasto".
+                      <td colSpan={4} className="p-6 text-center text-[#64748B]">
+                        No hay piezas ni gastos registrados para este equipo.
                       </td>
                     </tr>
+                  ) : (
+                    order.parts?.map((p: any) => (
+                      <tr key={p.id} className="hover:bg-[#131926]/50">
+                        <td className="p-3 font-semibold text-white">{p.name}</td>
+                        <td className="p-3 text-[#94A3B8]">
+                          {p.sourceType === 'INTERNAL' ? 'Almacén PhoneFix' : `Caseta (${p.supplierName || 'Externa'})`}
+                        </td>
+                        <td className="p-3 font-mono text-red-400">{formatMoney(p.cost)}</td>
+                        <td className="p-3 font-mono font-bold text-[#00E5FF]">{formatMoney(p.price)}</td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
             </div>
 
-            {/* Resumen Financiero de la Orden */}
-            <div className="p-4 bg-[#131926] border border-[#1E293B] rounded-2xl flex flex-wrap gap-6 justify-between items-center">
+            {/* Resumen Financiero del Servicio */}
+            <div className="p-4 rounded-xl bg-[#131926] border border-[#1E293B] flex flex-wrap justify-between gap-4 text-xs">
               <div>
-                <p className="text-[#94A3B8] text-[10px]">Costo Salida Caja Chica</p>
-                <p className="font-extrabold text-white text-base">{formatMoney(order.costCashOut)}</p>
+                <span className="text-[#94A3B8] block">Total Cotizado / Acordado:</span>
+                <span className="font-extrabold text-white text-base">{formatMoney(order.estimatedTotal)}</span>
               </div>
               <div>
-                <p className="text-[#94A3B8] text-[10px]">Total Cotizado a Cliente</p>
-                <p className="font-extrabold text-[#00E5FF] text-base">{formatMoney(order.estimatedTotal)}</p>
+                <span className="text-[#94A3B8] block">Salida de Caja Chica (Costo Repuestos):</span>
+                <span className="font-extrabold text-red-400 text-base">{formatMoney(order.costCashOut)}</span>
               </div>
               <div>
-                <p className="text-[#94A3B8] text-[10px]">Ganancia Estimada</p>
-                <p className="font-extrabold text-[#10B981] text-base">{formatMoney(order.profit)}</p>
+                <span className="text-[#94A3B8] block">Ganancia Neta Estimada:</span>
+                <span className="font-extrabold text-[#10B981] text-base">{formatMoney(order.profit)}</span>
               </div>
             </div>
           </div>
         )}
 
         {/* ======================================================== */}
-        {/* TAB 3: LIQUIDACIÓN, COBRO FINAL Y GARANTÍA */}
+        {/* TAB 3: LIQUIDACIÓN, RETIRO Y FACTURACIÓN MINIO */}
         {/* ======================================================== */}
         {activeTab === 'ENTREGA' && (
-          <div className="space-y-5 text-xs">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="space-y-6 text-xs">
+
+            {/* SECCIÓN FACTURA / COMPROBANTE DIGITAL EN MINIO */}
+            <div className="p-5 rounded-2xl bg-[#131926] border border-cyan-500/30 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                    <FileText size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                      Comprobante de Servicio y Garantía (MinIO S3)
+                    </h4>
+                    <p className="text-[11px] text-slate-400">
+                      Documento PDF con logo oficial PhoneFix, afiliación ASOTTECMO, desglose financiero bicanal y póliza de garantía de 3 semanas.
+                    </p>
+                  </div>
+                </div>
+
+                {order.invoiceNumber && (
+                  <span className="px-3 py-1 rounded-full bg-cyan-500/15 border border-cyan-500/40 text-cyan-400 font-mono text-xs font-bold self-start sm:self-auto">
+                    {order.invoiceNumber}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                {order.invoicePdfUrl && (
+                  <a
+                    href={order.invoicePdfUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2.5 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/50 text-cyan-300 font-extrabold rounded-xl text-xs flex items-center gap-2 transition shadow-lg shadow-cyan-500/10 cursor-pointer"
+                  >
+                    <Printer size={15} />
+                    Ver / Imprimir Comprobante PDF
+                  </a>
+                )}
+
+                <button
+                  type="button"
+                  disabled={generatingInvoice}
+                  onClick={handleGenerateInvoice}
+                  className="px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black font-extrabold rounded-xl text-xs flex items-center gap-2 transition shadow-lg shadow-cyan-500/20 active:scale-95 cursor-pointer disabled:opacity-50"
+                >
+                  <FileText size={15} />
+                  {generatingInvoice
+                    ? 'Generando PDF en MinIO...'
+                    : order.invoicePdfUrl
+                    ? 'Regenerar Comprobante PDF'
+                    : 'Generar Comprobante PDF'}
+                </button>
+              </div>
+            </div>
+
+            {/* Cuadro de Saldos */}
+            <div className="p-4 rounded-xl bg-[#0D121F] border border-[#1E293B] flex flex-wrap justify-between items-center gap-4">
+              <div>
+                <span className="text-[#94A3B8] block text-[11px]">Total Cotizado:</span>
+                <span className="font-extrabold text-white text-lg">{formatMoney(order.estimatedTotal)}</span>
+              </div>
+              <div>
+                <span className="text-[#94A3B8] block text-[11px]">Seña Ya Cobrada:</span>
+                <span className="font-extrabold text-[#10B981] text-lg">
+                  {formatMoney(order.depositCash + order.depositQr)}
+                </span>
+              </div>
+              <div>
+                <span className="text-[#94A3B8] block text-[11px]">Saldo Pendiente de Cobro:</span>
+                <span className="font-extrabold text-[#00E5FF] text-xl">
+                  {formatMoney(order.remainingBalance)}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               
-              {/* Opción A: Entrega Exitosa Reparada */}
+              {/* Opción A: Entregar Reparado */}
               <div className="p-5 rounded-2xl bg-[#131926] border border-[#1E293B] space-y-4">
                 <div className="flex items-center gap-2 text-[#10B981] font-bold text-sm">
                   <CheckCircle size={18} />
-                  <span>Equipo Reparado con Éxito</span>
+                  <span>Cobro de Saldo & Entrega Conforme</span>
                 </div>
 
-                <div className="p-3 bg-[#0D121F] rounded-xl space-y-2 border border-[#1E293B]">
-                  <div className="flex justify-between">
-                    <span className="text-[#94A3B8]">Total Cotizado:</span>
-                    <span className="text-white font-bold">{formatMoney(order.estimatedTotal)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#94A3B8]">Seña Recibida (Efectivo/QR):</span>
-                    <span className="text-[#10B981] font-bold">{formatMoney(order.totalCollected)}</span>
-                  </div>
-                  <div className="flex justify-between pt-2 border-t border-[#1E293B] text-sm">
-                    <span className="text-[#94A3B8] font-bold">Saldo Pendiente:</span>
-                    <span className="text-[#00E5FF] font-extrabold">{formatMoney(order.remainingBalance)}</span>
-                  </div>
-                </div>
-
-                {/* Cobro Bicanal del Saldo Final */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[#94A3B8] font-semibold mb-1">
-                      Cobro Efectivo (Bs.)
+                  <div className="space-y-1.5">
+                    <label className="block text-[#94A3B8] font-semibold">
+                      Saldo Efectivo (Bs.)
                     </label>
                     <input
                       type="number"
@@ -408,9 +644,9 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                       placeholder="0.00"
                     />
                   </div>
-                  <div>
-                    <label className="block text-[#94A3B8] font-semibold mb-1">
-                      Cobro QR (Bs.)
+                  <div className="space-y-1.5">
+                    <label className="block text-[#94A3B8] font-semibold">
+                      Saldo QR / Banco (Bs.)
                     </label>
                     <input
                       type="number"
@@ -424,17 +660,17 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                   </div>
                 </div>
 
-                {/* Período de Garantía (Por defecto: 3 Semanas) */}
+                {/* Selección de Garantía */}
                 <div className="space-y-1.5">
                   <label className="block text-[#94A3B8] font-semibold">
-                    Garantía Otorgada (Corre desde hoy)
+                    Póliza de Garantía Otorgada
                   </label>
                   <select
                     value={warrantyChoice}
                     onChange={e => setWarrantyChoice(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-[#0D121F] border border-[#00E5FF]/30 rounded-xl text-white outline-none"
+                    className="w-full px-3 py-2 bg-[#0D121F] border border-[#1E293B] rounded-xl text-white outline-none focus:border-[#00E5FF]"
                   >
-                    <option value="3_SEMANAS">3 Semanas (Estándar PhoneFix)</option>
+                    <option value="3_SEMANAS">3 Semanas (Estándar de Taller)</option>
                     <option value="2_SEMANAS">2 Semanas</option>
                     <option value="1_MES">1 Mes</option>
                     <option value="3_MESES">3 Meses (Pantallas OLED / Calidad Original)</option>
