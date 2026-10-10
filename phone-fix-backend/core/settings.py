@@ -9,7 +9,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 env = environ.Env(
     DEBUG=(bool, False)
 )
-environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+root_env = os.path.join(BASE_DIR.parent, '.env')
+local_env = os.path.join(BASE_DIR, '.env')
+if os.path.exists(root_env):
+    environ.Env.read_env(root_env)
+elif os.path.exists(local_env):
+    environ.Env.read_env(local_env)
 
 SECRET_KEY = env('SECRET_KEY', default='django-insecure-default-key')
 DEBUG = env('DEBUG')
@@ -88,7 +93,7 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 LANGUAGE_CODE = "es-la"
-TIME_ZONE = "America/Caracas"  # Ajustar a la zona horaria deseada
+TIME_ZONE = env('TIME_ZONE', default='America/La_Paz')
 USE_I18N = True
 USE_TZ = True
 

@@ -9,6 +9,7 @@ class AuthPayload:
     token: str
     user_id: int
     role: str
+    permissions: list[str]
 
 @strawberry.type
 class AuthMutation:
@@ -18,10 +19,14 @@ class AuthMutation:
         if user is None:
             return None
         
+        user_role = user.role_ref.name if getattr(user, 'role_ref', None) else getattr(user, 'role', 'STAFF')
+        perms = user.get_all_permission_codes() if hasattr(user, 'get_all_permission_codes') else []
+
         # Generate JWT token
         payload = {
             'user_id': user.id,
-            'role': getattr(user, 'role', 'STAFF'),
+            'role': user_role,
+            'permissions': perms,
             'exp': datetime.datetime.utcnow() + datetime.timedelta(days=settings.JWT_EXPIRATION_DELTA_DAYS),
             'iat': datetime.datetime.utcnow()
         }
@@ -31,7 +36,8 @@ class AuthMutation:
         return AuthPayload(
             token=token,
             user_id=user.id,
-            role=getattr(user, 'role', 'STAFF')
+            role=user_role,
+            permissions=perms
         )
 
 def get_user_from_jwt(request):
