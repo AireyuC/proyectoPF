@@ -1,195 +1,333 @@
 import React, { useState } from 'react';
-import { TrendingUp, TrendingDown, Wallet, AlertCircle, Save, DollarSign, Calculator } from 'lucide-react';
+import { useQuery, useMutation } from '@apollo/client/react';
+import { 
+  Wallet, 
+  DollarSign, 
+  QrCode, 
+  TrendingUp, 
+  CheckCircle2, 
+  AlertCircle, 
+  RefreshCw,
+  History
+} from 'lucide-react';
+import { GET_DRAWER_SUMMARY, CREATE_CASH_CLOSE, GET_CASH_CLOSES } from '../../../api/graphql';
 import { formatMoney } from '../../../utils/format';
 
-interface SummaryCardProps {
-    title: string;
-    amount: number;
-    icon: React.ReactNode;
-    color: string;
-}
+export const CashClosePage: React.FC = () => {
+  const [initialCash, setInitialCash] = useState<number | ''>(200);
+  const [actualCash, setActualCash] = useState<number | ''>('');
+  const [expensesCash, setExpensesCash] = useState<number | ''>(0);
+  const [closeSuccess, setCloseSuccess] = useState<any | null>(null);
+  const [errorMsg, setErrorMsg] = useState('');
 
-// Subcomponente auxiliar para tarjetas
-const SummaryCard = ({ title, amount, icon, color }: SummaryCardProps) => (
-    <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex items-center gap-4">
-        <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${color}`}>
-            {icon}
-        </div>
+  // GraphQL
+  const { data: drawerData, loading: loadingDrawer, refetch: refetchDrawer } = useQuery<any>(GET_DRAWER_SUMMARY, {
+    variables: { initialCash: Number(initialCash || 0) },
+    fetchPolicy: 'network-only'
+  });
+
+  const { data: historyData, refetch: refetchHistory } = useQuery<any>(GET_CASH_CLOSES, {
+    variables: { limit: 10 }
+  });
+
+  const [createCloseMutation, { loading: savingClose }] = useMutation<any>(CREATE_CASH_CLOSE);
+
+  const summary = drawerData?.activeDrawerSummary;
+
+  const expectedCash = summary ? summary.expectedDrawerCash : 0;
+  const expectedQr = summary ? summary.expectedBankQr : 0;
+  const counted = Number(actualCash || 0);
+  const difference = actualCash !== '' ? counted - expectedCash : 0;
+
+  const handleSubmitClose = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+
+    if (actualCash === '') {
+      setErrorMsg('Ingresa el monto de efectivo físico contado en caja.');
+      return;
+    }
+
+    try {
+      const res = await createCloseMutation({
+        variables: {
+          input: {
+            initialCash: Number(initialCash || 0),
+            actualCash: Number(actualCash),
+            expensesCash: Number(expensesCash || 0)
+          }
+        }
+      });
+      setCloseSuccess(res.data.createCashClose);
+      setActualCash('');
+      refetchDrawer();
+      refetchHistory();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Error al registrar el cierre de caja.');
+    }
+  };
+
+  return (
+    <div className="max-w-7xl mx-auto space-y-6">
+      
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#1E293B]">
         <div>
-            <p className="text-xs text-slate-400 font-bold uppercase mb-0.5">{title}</p>
-            <p className="text-xl font-bold text-slate-800">{formatMoney(amount)}</p>
+          <h2 className="text-2xl font-extrabold text-white tracking-tight">
+            Arqueo & Cierre de Caja Diario
+          </h2>
+          <p className="text-xs text-[#94A3B8]">
+            Conciliación de dinero físico en gaveta versus extracto bancario QR
+          </p>
         </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => refetchDrawer()}
+            className="p-2 bg-[#131926] hover:bg-[#1E293B] text-[#94A3B8] hover:text-white rounded-xl border border-[#1E293B] transition-all cursor-pointer"
+            title="Recalcular arqueo"
+          >
+            <RefreshCw size={16} className={loadingDrawer ? 'animate-spin' : ''} />
+          </button>
+          <span className="px-3 py-1.5 bg-[#00E5FF]/10 text-[#00E5FF] border border-[#00E5FF]/20 rounded-xl text-xs font-bold">
+            {summary?.date || new Date().toISOString().split('T')[0]}
+          </span>
+        </div>
+      </div>
+
+      {errorMsg && (
+        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-center gap-3 text-red-400 text-sm">
+          <AlertCircle size={20} className="shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
+
+      {/* Grid de Métricas del Arqueo en Vivo */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        {/* Efectivo Esperado */}
+        <div className="bg-[#0D121F] border border-[#1E293B] rounded-2xl p-5 space-y-2">
+          <div className="flex items-center justify-between text-xs text-[#94A3B8]">
+            <span className="font-bold uppercase tracking-wider text-[10px]">Efectivo en Mano</span>
+            <div className="p-1.5 rounded-lg bg-[#10B981]/15 text-[#10B981]">
+              <DollarSign size={16} />
+            </div>
+          </div>
+          <p className="text-2xl font-extrabold text-white">
+            {formatMoney(expectedCash)}
+          </p>
+          <p className="text-[11px] text-[#64748B]">
+            Base inicial + Ventas + Cobros taller
+          </p>
+        </div>
+
+        {/* QR Bancario Esperado */}
+        <div className="bg-[#0D121F] border border-[#1E293B] rounded-2xl p-5 space-y-2">
+          <div className="flex items-center justify-between text-xs text-[#94A3B8]">
+            <span className="font-bold uppercase tracking-wider text-[10px]">Total en Banco (QR)</span>
+            <div className="p-1.5 rounded-lg bg-[#00E5FF]/15 text-[#00E5FF]">
+              <QrCode size={16} />
+            </div>
+          </div>
+          <p className="text-2xl font-extrabold text-[#00E5FF]">
+            {formatMoney(expectedQr)}
+          </p>
+          <p className="text-[11px] text-[#64748B]">
+            Verificar contra extracto bancario
+          </p>
+        </div>
+
+        {/* Ventas Mostrador Hoy */}
+        <div className="bg-[#0D121F] border border-[#1E293B] rounded-2xl p-5 space-y-2">
+          <div className="flex items-center justify-between text-xs text-[#94A3B8]">
+            <span className="font-bold uppercase tracking-wider text-[10px]">Ventas Mostrador (Hoy)</span>
+            <div className="p-1.5 rounded-lg bg-blue-500/15 text-blue-400">
+              <TrendingUp size={16} />
+            </div>
+          </div>
+          <p className="text-2xl font-extrabold text-white">
+            {formatMoney((summary?.todaySalesCash || 0) + (summary?.todaySalesQr || 0))}
+          </p>
+          <p className="text-[11px] text-[#64748B]">
+            Ef: {formatMoney(summary?.todaySalesCash || 0)} • QR: {formatMoney(summary?.todaySalesQr || 0)}
+          </p>
+        </div>
+
+        {/* Cobros de Taller Hoy */}
+        <div className="bg-[#0D121F] border border-[#1E293B] rounded-2xl p-5 space-y-2">
+          <div className="flex items-center justify-between text-xs text-[#94A3B8]">
+            <span className="font-bold uppercase tracking-wider text-[10px]">Cobros Taller (Hoy)</span>
+            <div className="p-1.5 rounded-lg bg-[#F59E0B]/15 text-[#F59E0B]">
+              <Wallet size={16} />
+            </div>
+          </div>
+          <p className="text-2xl font-extrabold text-white">
+            {formatMoney((summary?.todayRepairsCash || 0) + (summary?.todayRepairsQr || 0))}
+          </p>
+          <p className="text-[11px] text-[#64748B]">
+            Señas + Retiros del día
+          </p>
+        </div>
+
+      </div>
+
+      {/* Formulario de Cierre Diario */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <form onSubmit={handleSubmitClose} className="lg:col-span-2 bg-[#0D121F] border border-[#1E293B] rounded-3xl p-6 md:p-8 space-y-6">
+          <div className="flex items-center gap-2 pb-3 border-b border-[#1E293B]">
+            <span className="w-2 h-5 bg-[#00E5FF] rounded-full" />
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+              Formulario de Arqueo Físico
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+            <div>
+              <label className="block text-[#94A3B8] font-semibold mb-1.5">
+                Base Inicial de Caja (Bs.)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.5"
+                value={initialCash}
+                onChange={e => setInitialCash(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                className="w-full px-3.5 py-2.5 bg-[#131926] border border-[#1E293B] rounded-xl text-white outline-none focus:border-[#00E5FF]"
+                placeholder="200.00"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[#94A3B8] font-semibold mb-1.5">
+                Salidas Menores / Gastos (Bs.)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.5"
+                value={expensesCash}
+                onChange={e => setExpensesCash(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                className="w-full px-3.5 py-2.5 bg-[#131926] border border-[#1E293B] rounded-xl text-white outline-none focus:border-[#00E5FF]"
+                placeholder="0.00"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[#94A3B8] font-semibold mb-1.5">
+                Efectivo Contado en Mano (Bs.) *
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.5"
+                required
+                value={actualCash}
+                onChange={e => setActualCash(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                className="w-full px-3.5 py-2.5 bg-[#131926] border border-[#00E5FF]/40 rounded-xl text-[#00E5FF] font-extrabold text-sm outline-none glow-cyan-subtle"
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+
+          {/* Resultado del Cuadre */}
+          {actualCash !== '' && (
+            <div className={`p-4 rounded-2xl border flex items-center justify-between text-xs ${
+              Math.abs(difference) < 0.01
+                ? 'bg-[#10B981]/10 border-[#10B981]/30 text-[#10B981]'
+                : difference > 0
+                ? 'bg-blue-500/10 border-blue-500/30 text-blue-400'
+                : 'bg-red-500/10 border-red-500/30 text-red-400'
+            }`}>
+              <div>
+                <span className="font-bold">
+                  {Math.abs(difference) < 0.01 
+                    ? '¡Caja Cuadrada Perfectamente!' 
+                    : difference > 0 
+                    ? 'Sobrante en Gaveta:' 
+                    : 'Faltante en Gaveta:'}
+                </span>
+                <p className="text-[11px] opacity-80">
+                  Esperado: {formatMoney(expectedCash)} • Contado: {formatMoney(counted)}
+                </p>
+              </div>
+              <span className="text-lg font-extrabold font-mono">
+                {difference > 0 ? `+${formatMoney(difference)}` : formatMoney(difference)}
+              </span>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={savingClose}
+            className="w-full py-4 bg-gradient-to-r from-[#00E5FF] to-[#00B4D8] hover:brightness-110 active:scale-[0.99] text-[#080B11] font-extrabold rounded-xl shadow-lg shadow-[#00E5FF]/20 flex items-center justify-center gap-2 cursor-pointer transition-all text-xs disabled:opacity-50"
+          >
+            {savingClose ? (
+              <RefreshCw size={16} className="animate-spin" />
+            ) : (
+              <CheckCircle2 size={16} />
+            )}
+            Guardar Cierre de Caja Diario
+          </button>
+        </form>
+
+        {/* Historial de Cierres Recientes */}
+        <div className="bg-[#0D121F] border border-[#1E293B] rounded-3xl p-6 space-y-4">
+          <div className="flex items-center gap-2 pb-3 border-b border-[#1E293B]">
+            <History size={16} className="text-[#00E5FF]" />
+            <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+              Últimos Cierres Registrados
+            </h4>
+          </div>
+
+          <div className="space-y-3 overflow-y-auto max-h-[350px] pr-1 text-xs">
+            {historyData?.cashCloses?.map((c: any) => (
+              <div key={c.id} className="p-3 bg-[#131926] border border-[#1E293B] rounded-xl space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-white">{c.date}</span>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                    c.difference >= 0 ? 'bg-[#10B981]/15 text-[#10B981]' : 'bg-red-500/15 text-red-400'
+                  }`}>
+                    Dif: {formatMoney(c.difference)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-[11px] text-[#94A3B8]">
+                  <span>Físico: {formatMoney(c.actualCash)}</span>
+                  <span>QR: {formatMoney(c.expectedQrTotal)}</span>
+                </div>
+                <p className="text-[10px] text-[#64748B]">Por: {c.closedByName}</p>
+              </div>
+            ))}
+            {(!historyData?.cashCloses || historyData.cashCloses.length === 0) && (
+              <p className="text-center text-xs text-[#64748B] py-8">
+                No hay cierres registrados aún.
+              </p>
+            )}
+          </div>
+        </div>
+
+      </div>
+
+      {/* Modal Éxito Cierre */}
+      {closeSuccess && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="bg-[#0D121F] border border-[#00E5FF]/40 rounded-3xl p-6 max-w-sm w-full text-center space-y-4 glow-cyan shadow-2xl">
+            <div className="w-12 h-12 rounded-full bg-[#10B981]/15 text-[#10B981] flex items-center justify-center mx-auto">
+              <CheckCircle2 size={28} />
+            </div>
+            <h3 className="text-xl font-extrabold text-white">¡Cierre Guardado!</h3>
+            <p className="text-xs text-[#94A3B8]">
+              Diferencia registrada: <strong className="text-[#00E5FF]">{formatMoney(closeSuccess.difference)}</strong>
+            </p>
+            <button
+              onClick={() => setCloseSuccess(null)}
+              className="w-full py-2.5 bg-[#1E293B] hover:bg-[#334155] text-white font-bold rounded-xl text-xs cursor-pointer"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
-);
-
-export const CashClosePage = () => {
-    // Estado simulado del día
-    const dailyStats = {
-        salesTotal: 450,      // Ventas POS
-        repairsTotal: 1200,   // Reparaciones Taller
-        expensesTotal: 180,   // Gastos (Almuerzo, Repuestos)
-        initialCash: 200      // Base de caja (Cambio)
-    };
-
-    const expectedCash = dailyStats.initialCash + dailyStats.salesTotal + dailyStats.repairsTotal - dailyStats.expensesTotal;
-
-    const [actualCash, setActualCash] = useState<string>(''); // Lo que el usuario cuenta físicamente
-    const difference = actualCash ? parseFloat(actualCash) - expectedCash : 0;
-
-    return (
-        <div className="w-full space-y-6 animate-in fade-in slide-in-from-bottom-4">
-
-            {/* Título */}
-            <div className="flex justify-between items-center">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-800">Cierre de Caja Diario</h1>
-                    <p className="text-slate-500 text-sm">Resumen de movimientos del día</p>
-                </div>
-                <div className="px-4 py-2 bg-slate-100 rounded-lg text-slate-600 font-mono text-sm border border-slate-200">
-                    {new Date().toLocaleDateString()}
-                </div>
-            </div>
-
-            {/* Tarjetas de Resumen Superior */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                <SummaryCard
-                    title="Base Inicial"
-                    amount={dailyStats.initialCash}
-                    icon={<Wallet size={20} />}
-                    color="bg-slate-50 text-slate-600"
-                />
-                <SummaryCard
-                    title="Ventas (+)"
-                    amount={dailyStats.salesTotal}
-                    icon={<TrendingUp size={20} />}
-                    color="bg-teal-50 text-teal-600"
-                />
-                <SummaryCard
-                    title="Reparaciones (+)"
-                    amount={dailyStats.repairsTotal}
-                    icon={<TrendingUp size={20} />}
-                    color="bg-blue-50 text-blue-600"
-                />
-                <SummaryCard
-                    title="Gastos (-)"
-                    amount={dailyStats.expensesTotal}
-                    icon={<TrendingDown size={20} />}
-                    color="bg-red-50 text-red-600"
-                />
-            </div>
-
-            {/* Sección Principal de Arqueo (Layout de 3 Columnas) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
-
-                {/* COLUMNA 1: DETALLE DE INGRESOS */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-full">
-                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
-                        <div className="p-2 bg-teal-50 text-teal-600 rounded-lg">
-                            <TrendingUp size={20} />
-                        </div>
-                        <h2 className="font-bold text-slate-700">Detalle de Ingresos</h2>
-                    </div>
-                    <div className="space-y-4">
-                        <div className="flex justify-between items-center p-3 rounded-lg bg-teal-50/30">
-                            <span className="text-slate-600 text-sm font-medium">Ventas de Mostrador</span>
-                            <span className="font-bold text-slate-800">{formatMoney(dailyStats.salesTotal)}</span>
-                        </div>
-                        <div className="flex justify-between items-center p-3 rounded-lg bg-blue-50/30">
-                            <span className="text-slate-600 text-sm font-medium">Servicio Técnico</span>
-                            <span className="font-bold text-slate-800">{formatMoney(dailyStats.repairsTotal)}</span>
-                        </div>
-                        <div className="flex justify-between items-center p-3 rounded-lg bg-slate-50">
-                            <span className="text-slate-500 text-sm">Base / Cambio Inicial</span>
-                            <span className="font-bold text-slate-600">{formatMoney(dailyStats.initialCash)}</span>
-                        </div>
-                        <div className="pt-4 border-t border-slate-100 flex justify-between items-center mt-2">
-                            <span className="font-bold text-slate-500">Total Entradas</span>
-                            <span className="font-bold text-teal-600 text-lg">
-                                {formatMoney(dailyStats.initialCash + dailyStats.salesTotal + dailyStats.repairsTotal)}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* COLUMNA 2: EGRESOS Y BALANCE TEÓRICO */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-full">
-                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
-                        <div className="p-2 bg-red-50 text-red-600 rounded-lg">
-                            <Calculator size={20} />
-                        </div>
-                        <h2 className="font-bold text-slate-700">Balance del Sistema</h2>
-                    </div>
-                    <div className="space-y-6">
-                        <div className="flex justify-between items-center p-3 rounded-lg bg-red-50/30 border border-red-50">
-                            <span className="text-red-700 text-sm font-medium">Total Egresos (Gastos)</span>
-                            <span className="font-bold text-red-600">-{formatMoney(dailyStats.expensesTotal)}</span>
-                        </div>
-
-                        <div className="p-5 bg-slate-50 rounded-xl border border-slate-200 text-center">
-                            <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Debería existir en caja</p>
-                            <p className="text-3xl font-black text-slate-800">{formatMoney(expectedCash)}</p>
-                        </div>
-                        <p className="text-xs text-slate-400 text-center">
-                            Este es el monto calculado automáticamente por el sistema basado en los registros.
-                        </p>
-                    </div>
-                </div>
-
-                {/* COLUMNA 3: ARQUEO FÍSICO (LA HORA DE LA VERDAD) */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-full flex flex-col justify-between">
-                    <div>
-                        <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
-                            <div className="p-2 bg-slate-800 text-white rounded-lg">
-                                <DollarSign size={20} />
-                            </div>
-                            <h2 className="font-bold text-slate-700">Arqueo Físico</h2>
-                        </div>
-
-                        <div className="mb-6">
-                            <label className="block text-sm font-bold text-slate-500 mb-2 uppercase">Conteo Real (Billetes)</label>
-                            <div className="relative">
-                                <span className="absolute left-4 top-4 text-slate-400 font-bold">Bs.</span>
-                                <input
-                                    type="number"
-                                    className="w-full pl-12 pr-4 py-3.5 border-2 border-slate-200 rounded-xl text-2xl font-bold text-slate-700 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 transition-all bg-slate-50 focus:bg-white"
-                                    placeholder="0.00"
-                                    value={actualCash}
-                                    onChange={(e) => setActualCash(e.target.value)}
-                                    autoFocus
-                                />
-                            </div>
-                        </div>
-
-                        {/* Feedback Visual de Diferencia */}
-                        {actualCash !== '' && (
-                            <div className={`p-4 rounded-xl border flex items-start gap-3 animate-in zoom-in-95 duration-200 ${difference === 0
-                                ? 'bg-green-50 border-green-100 text-green-700'
-                                : difference > 0
-                                    ? 'bg-blue-50 border-blue-100 text-blue-700'
-                                    : 'bg-red-50 border-red-100 text-red-700'
-                                }`}>
-                                <AlertCircle size={24} className="shrink-0" />
-                                <div>
-                                    <p className="font-bold text-sm">
-                                        {difference === 0 ? '¡Cuadre Perfecto!' : difference > 0 ? 'Sobrante Detectado' : 'Faltante Detectado'}
-                                    </p>
-                                    <p className="text-2xl font-bold mt-1 tracking-tight">
-                                        {difference > 0 ? '+' : ''}{formatMoney(difference)}
-                                    </p>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="mt-8">
-                        <button className="w-full bg-slate-900 hover:bg-black text-white py-4 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95 text-lg">
-                            <Save size={20} />
-                            Cerrar Turno
-                        </button>
-                    </div>
-                </div>
-
-            </div>
-        </div>
-    );
+  );
 };

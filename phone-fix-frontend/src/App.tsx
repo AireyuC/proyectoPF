@@ -2,7 +2,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import MainLayout from './components/layout/MainLayout';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
-import { AdminOnlyRoute } from './components/auth/AdminOnlyRoute';
+import { PermissionRoute } from './components/auth/PermissionRoute';
 import { LoginPage } from './features/staff/pages/LoginPage';
 
 import { NewOrderPage } from './features/reception/pages/NewOrderPage';
@@ -11,6 +11,7 @@ import { InventoryPage } from './features/inventory/pages/InventoryPage';
 import { PosPage } from './features/sales/pages/PosPage';
 import { CashClosePage } from './features/sales/pages/CashClosePage';
 import { ClientsPage } from './features/clients/pages/ClientsPage';
+import { UsersPage } from './features/staff/pages/UsersPage';
 
 function App() {
   return (
@@ -19,19 +20,43 @@ function App() {
         {/* Ruta pública de acceso */}
         <Route path="/login" element={<LoginPage />} />
 
-        {/* Todas las rutas del Dashboard están protegidas */}
+        {/* Todas las rutas del Dashboard están protegidas por sesión */}
         <Route path="/" element={<ProtectedRoute />}>
           <Route element={<MainLayout />}>
-            {/* Rutas compartidas (STAFF y ADMIN) */}
-            <Route index element={<NewOrderPage />} />
-            <Route path="taller" element={<WorkshopPage />} />
-            <Route path="inventario" element={<InventoryPage />} />
             
-            {/* Rutas exclusivas para ADMIN */}
-            <Route element={<AdminOnlyRoute />}>
+            {/* Recepción de Equipos */}
+            <Route element={<PermissionRoute permission="recepcion.ordenes.crear" />}>
+              <Route index element={<NewOrderPage />} />
+            </Route>
+
+            {/* Taller Activo */}
+            <Route element={<PermissionRoute permission="taller.reparaciones.ver" />}>
+              <Route path="taller" element={<WorkshopPage />} />
+            </Route>
+
+            {/* Inventario */}
+            <Route element={<PermissionRoute permission="inventario.productos.ver" />}>
+              <Route path="inventario" element={<InventoryPage />} />
+            </Route>
+            
+            {/* Venta Mostrador (POS) */}
+            <Route element={<PermissionRoute permission="ventas.pos.vender" />}>
               <Route path="ventas" element={<PosPage />} />
+            </Route>
+
+            {/* Arqueo de Caja */}
+            <Route element={<PermissionRoute permission="caja.movimientos.ver" />}>
               <Route path="caja" element={<CashClosePage />} />
+            </Route>
+
+            {/* Clientes */}
+            <Route element={<PermissionRoute permission="clientes.cartera.ver" />}>
               <Route path="clientes" element={<ClientsPage />} />
+            </Route>
+
+            {/* Personal & Matriz de Roles (Seguridad) */}
+            <Route element={<PermissionRoute permission="seguridad.usuarios.ver" />}>
+              <Route path="usuarios" element={<UsersPage />} />
             </Route>
 
             {/* Error 404 local del dashboard */}

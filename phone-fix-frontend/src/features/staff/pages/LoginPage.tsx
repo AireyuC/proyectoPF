@@ -1,19 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { gql } from '@apollo/client';
 import { useMutation } from '@apollo/client/react';
 import { useAuth } from '../../../context/AuthContext';
-import { Smartphone, Lock, User } from 'lucide-react';
-
-const LOGIN_MUTATION = gql`
-  mutation Login($username: String!, $password: String!) {
-    login(username: $username, password: $password) {
-      token
-      userId
-      role
-    }
-  }
-`;
+import { LOGIN_MUTATION } from '../../../api/graphql';
+import { Lock, User, ShieldCheck, Zap } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -26,14 +16,14 @@ export const LoginPage: React.FC = () => {
   const [executeLogin, { loading }] = useMutation(LOGIN_MUTATION, {
     onCompleted: (data: any) => {
       if (data.login) {
-        login(data.login.token, data.login.userId, data.login.role);
-        navigate('/'); // Redirigir al dashboard al entrar con éxito
+        login(data.login.token, data.login.userId, data.login.role, data.login.permissions || []);
+        navigate('/');
       } else {
-        setLoginError('Credenciales incorrectas');
+        setLoginError('Credenciales incorrectas o usuario deshabilitado.');
       }
     },
     onError: (error: any) => {
-      setLoginError(error.message || 'Ocurrió un error al conectar con el servidor.');
+      setLoginError(error.message || 'Error de conexión con el servidor GraphQL.');
     }
   });
 
@@ -41,75 +31,78 @@ export const LoginPage: React.FC = () => {
     e.preventDefault();
     setLoginError('');
     if (!username || !password) {
-      setLoginError('Por favor completa todos los campos.');
+      setLoginError('Por favor completa tu usuario y contraseña.');
       return;
     }
     executeLogin({ variables: { username, password } });
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 text-slate-800">
+    <div className="relative flex min-h-screen min-h-dvh items-center justify-center overflow-hidden bg-[#080B11] text-white p-4">
       
-      {/* Full Screen Background Image (Light & Clean) */}
+      {/* Background Cyber Ambient Lights */}
+      <div className="absolute top-1/4 left-1/3 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] bg-[#00E5FF]/10 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute bottom-1/4 right-1/3 w-[450px] h-[450px] bg-[#3B82F6]/10 rounded-full blur-[140px] pointer-events-none" />
+      
+      {/* Subtle Grid overlay */}
       <div 
-        className="absolute inset-0 z-0 bg-cover bg-center opacity-60 select-none pointer-events-none mix-blend-multiply"
-        style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=2070&auto=format&fit=crop)' }}
+        className="absolute inset-0 bg-[linear-gradient(to_right,#1E293B15_1px,transparent_1px),linear-gradient(to_bottom,#1E293B15_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none"
       />
-      
-      {/* Light Ambient Overlay */}
-      <div className="absolute inset-0 z-0 bg-gradient-to-br from-slate-100/90 via-white/80 to-slate-200/90" />
 
-      {/* Decorative Teal & Cyan Blurs behind the modal */}
-      <div className="absolute top-1/2 left-1/3 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-teal-400/20 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute top-1/3 right-1/4 w-[400px] h-[400px] bg-cyan-300/20 rounded-full blur-[100px] pointer-events-none" />
-      
-      {/* Centered Glassmorphism Card (Light Theme) */}
-      <div className="relative z-10 w-full max-w-lg bg-white/70 backdrop-blur-2xl border border-white p-12 rounded-[2.5rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)]">
+      {/* Main Login Card */}
+      <div className="relative z-10 w-full max-w-md bg-[#0D121F]/90 backdrop-blur-2xl border border-[#1E293B] p-8 md:p-10 rounded-3xl shadow-2xl shadow-black/80 glow-cyan-subtle">
         
         {/* Header Branding */}
-        <div className="text-center mb-10 flex flex-col items-center">
-          <div className="bg-teal-50 p-4 rounded-2xl border border-teal-100 mb-6 shadow-sm">
-             <Smartphone className="w-12 h-12 text-teal-500" />
+        <div className="text-center mb-8 flex flex-col items-center">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#00E5FF]/20 to-[#00E5FF]/5 border border-[#00E5FF]/30 flex items-center justify-center mb-4 glow-cyan-subtle">
+            <Zap className="w-8 h-8 text-[#00E5FF]" />
           </div>
-          <h1 className="text-4xl font-extrabold tracking-tight text-slate-800 mb-2">
-            PHONE<span className="text-teal-500">FIX</span>
+          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white mb-1">
+            PHONE<span className="text-[#00E5FF]">FIX</span>
           </h1>
-          <p className="text-slate-500 text-sm font-semibold tracking-wide uppercase">
-            Portal de Administración
+          <p className="text-xs font-semibold uppercase tracking-widest text-[#94A3B8] flex items-center gap-1.5 mt-1">
+            <ShieldCheck size={14} className="text-[#00E5FF]" />
+            Sistema de Taller & Punto de Venta
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
           
           {/* Input Usuario */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-500 ml-1 tracking-wider uppercase">Usuario</label>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-[#94A3B8] tracking-wider uppercase ml-1">
+              Usuario o Técnico
+            </label>
             <div className="relative group">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none group-focus-within:text-teal-500 text-slate-400 transition-colors">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#64748B] group-focus-within:text-[#00E5FF] transition-colors">
                 <User className="h-5 w-5" />
               </div>
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full pl-12 pr-4 py-3.5 bg-white/80 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 outline-none transition-all text-slate-800 placeholder-slate-400 text-lg shadow-sm"
-                placeholder="Ingresa tu usuario"
+                autoComplete="username"
+                className="w-full pl-11 pr-4 py-3 bg-[#131926] border border-[#1E293B] rounded-xl focus:border-[#00E5FF] focus:ring-1 focus:ring-[#00E5FF] outline-none transition-all text-white placeholder-[#64748B] text-sm"
+                placeholder="Ej. aireyu o usser"
               />
             </div>
           </div>
 
           {/* Input Contraseña */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-500 ml-1 tracking-wider uppercase">Contraseña</label>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-[#94A3B8] tracking-wider uppercase ml-1">
+              Contraseña
+            </label>
             <div className="relative group">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none group-focus-within:text-teal-500 text-slate-400 transition-colors">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#64748B] group-focus-within:text-[#00E5FF] transition-colors">
                 <Lock className="h-5 w-5" />
               </div>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-12 pr-4 py-3.5 bg-white/80 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 outline-none transition-all text-slate-800 placeholder-slate-400 text-lg shadow-sm font-sans tracking-widest"
+                autoComplete="current-password"
+                className="w-full pl-11 pr-4 py-3 bg-[#131926] border border-[#1E293B] rounded-xl focus:border-[#00E5FF] focus:ring-1 focus:ring-[#00E5FF] outline-none transition-all text-white placeholder-[#64748B] text-sm tracking-widest"
                 placeholder="••••••••"
               />
             </div>
@@ -117,20 +110,23 @@ export const LoginPage: React.FC = () => {
 
           {/* Error Message */}
           {loginError && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm text-center font-semibold shadow-sm animate-pulse">
+            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs font-medium text-center animate-shake">
               {loginError}
             </div>
           )}
 
           {/* Submit Button */}
-          <div className="pt-4">
+          <div className="pt-2">
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-4 px-4 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 focus:ring-4 focus:ring-teal-500/30 text-white rounded-2xl font-bold tracking-wide shadow-lg shadow-teal-500/25 active:scale-[0.98] transition-all flex items-center justify-center space-x-2 text-lg"
+              className="w-full py-3.5 px-4 bg-gradient-to-r from-[#00E5FF] to-[#00B4D8] hover:brightness-110 active:scale-[0.99] text-[#080B11] font-bold rounded-xl shadow-lg shadow-[#00E5FF]/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 text-sm tracking-wide"
             >
               {loading ? (
-                <span className="animate-pulse">Verificando...</span>
+                <span className="flex items-center gap-2">
+                  <span className="w-4 h-4 border-2 border-[#080B11] border-t-transparent rounded-full animate-spin" />
+                  Iniciando sesión...
+                </span>
               ) : (
                 <span>Ingresar al Sistema</span>
               )}
@@ -138,10 +134,15 @@ export const LoginPage: React.FC = () => {
           </div>
           
         </form>
-        
+
+        <div className="mt-8 pt-4 border-t border-[#1E293B] text-center">
+          <p className="text-[11px] text-[#64748B]">
+            PhoneFix Montero • Soporte Técnico Especializado
+          </p>
+        </div>
+
       </div>
     
     </div>
   );
 };
-

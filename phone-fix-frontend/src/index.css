@@ -1,12 +1,29 @@
 @import "tailwindcss";
 
-:root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+@theme {
+  --color-phonefix-bg: #080B11;
+  --color-phonefix-surface: #0D121F;
+  --color-phonefix-card: #131926;
+  --color-phonefix-card-hover: #1A2336;
+  --color-phonefix-border: #1E293B;
+  --color-phonefix-border-light: #334155;
+  --color-phonefix-cyan: #00E5FF;
+  --color-phonefix-cyan-hover: #00B4D8;
+  --color-phonefix-cyan-glow: rgba(0, 229, 255, 0.25);
+  --color-phonefix-white: #FFFFFF;
+  --color-phonefix-muted: #94A3B8;
+  --color-phonefix-subtle: #64748B;
+  --color-phonefix-success: #10B981;
+  --color-phonefix-warning: #F59E0B;
+  --color-phonefix-danger: #EF4444;
+  --color-phonefix-purple: #A855F7;
+  
+  --font-sans: 'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif;
+}
 
-  color-scheme: light dark;
-  font-synthesis: none;
+:root {
+  color-scheme: dark;
+  font-family: 'Outfit', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -16,10 +33,48 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
+  background-color: #080B11;
+  color: #FFFFFF;
+  overflow-x: hidden;
 }
 
 #root {
   width: 100%;
   min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Custom Cyber Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #080B11;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1E293B;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #00E5FF;
+}
+
+/* Glow effects */
+.glow-cyan {
+  box-shadow: 0 0 20px -3px rgba(0, 229, 255, 0.35);
+}
+
+.glow-cyan-subtle {
+  box-shadow: 0 0 15px -3px rgba(0, 229, 255, 0.15);
+}
+
+.border-glow-cyan {
+  border-color: #00E5FF;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
 }

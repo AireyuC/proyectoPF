@@ -1,17 +1,17 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-// Estructura de nuestro Usuario según el Backend
-interface User {
+export interface UserSession {
   id: number;
   role: string;
+  permissions: string[];
 }
 
-// Estructura de nuestro Contexto
 interface AuthContextType {
-  user: User | null;
+  user: UserSession | null;
   token: string | null;
   isAuthenticated: boolean;
-  login: (token: string, user_id: number, role: string) => void;
+  hasPermission: (permCode: string) => boolean;
+  login: (token: string, userId: number, role: string, permissions?: string[]) => void;
   logout: () => void;
 }
 
@@ -19,33 +19,37 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [token, setToken] = useState<string | null>(null);
-  const [user, setUser] = useState<User | null>(null);
-  // Un flag de carga inicial para no brincar al login si ya teníamos datos
+  const [user, setUser] = useState<UserSession | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
 
   useEffect(() => {
-    // Al cargar la app, revisamos si ya teníamos un token guardado
     const savedToken = localStorage.getItem('jwt_token');
     const savedRole = localStorage.getItem('user_role');
     const savedId = localStorage.getItem('user_id');
+    const savedPerms = localStorage.getItem('user_perms');
 
     if (savedToken && savedRole && savedId) {
+      let perms: string[] = [];
+      try {
+        perms = savedPerms ? JSON.parse(savedPerms) : [];
+      } catch {
+        perms = [];
+      }
       setToken(savedToken);
-      setUser({ id: Number(savedId), role: savedRole });
+      setUser({ id: Number(savedId), role: savedRole, permissions: perms });
     }
     
     setIsInitializing(false);
   }, []);
 
-  const login = (newToken: string, userId: number, role: string) => {
-    // Guardamos en estado
+  const login = (newToken: string, userId: number, role: string, permissions: string[] = []) => {
     setToken(newToken);
-    setUser({ id: userId, role });
+    setUser({ id: userId, role, permissions });
 
-    // Persistimos en caso de que refresque el navegador
     localStorage.setItem('jwt_token', newToken);
     localStorage.setItem('user_role', role);
     localStorage.setItem('user_id', userId.toString());
+    localStorage.setItem('user_perms', JSON.stringify(permissions));
   };
 
   const logout = () => {
@@ -54,13 +58,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('jwt_token');
     localStorage.removeItem('user_role');
     localStorage.removeItem('user_id');
+    localStorage.removeItem('user_perms');
   };
 
-  // Prevenir parpadeos mientras lee el localStorage
+  const hasPermission = (permCode: string): boolean => {
+    if (!user) return false;
+    const r = user.role.toUpperCase();
+    if (r === 'ADMIN' || r === 'ADMINISTRADOR' || r === 'SUPERUSER') {
+      return true;
+    }
+    return user.permissions?.includes(permCode) ?? false;
+  };
+
   if (isInitializing) return null;
 
   return (
-    <AuthContext.Provider value={{ user, token, isAuthenticated: !!token, login, logout }}>
+    <AuthContext.Provider value={{ user, token, isAuthenticated: !!token, hasPermission, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

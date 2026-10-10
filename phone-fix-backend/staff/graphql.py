@@ -91,12 +91,57 @@ class StaffQuery:
 @strawberry.type
 class StaffMutation:
     @strawberry.mutation
+    def create_user(
+        self,
+        username: str,
+        password: str,
+        first_name: Optional[str] = "",
+        last_name: Optional[str] = "",
+        email: Optional[str] = "",
+        role_id: Optional[int] = None
+    ) -> UserType:
+        role = Role.objects.filter(id=role_id).first() if role_id else None
+        role_code = "STAFF"
+        if role and role.name.upper() in ["ADMIN", "ADMINISTRADOR"]:
+            role_code = "ADMIN"
+
+        user = User.objects.create_user(
+            username=username,
+            password=password,
+            first_name=first_name or "",
+            last_name=last_name or "",
+            email=email or "",
+            role_ref=role,
+            role=role_code
+        )
+        return UserType.from_model(user)
+
+    @strawberry.mutation
+    def create_role(
+        self,
+        name: str,
+        description: Optional[str] = "",
+        permission_codes: Optional[List[str]] = None
+    ) -> RoleType:
+        with transaction.atomic():
+            role = Role.objects.create(name=name, description=description or "")
+            if permission_codes:
+                perms = Permission.objects.filter(code__in=permission_codes)
+                for p in perms:
+                    RolePermission.objects.create(role=role, permission=p)
+        return RoleType.from_model(role)
+
+    @strawberry.mutation
     def assign_user_role(self, user_id: int, role_id: int) -> Optional[UserType]:
         user = User.objects.filter(id=user_id).first()
         role = Role.objects.filter(id=role_id).first()
         if not user or not role:
             return None
         user.role_ref = role
+        if role.name.upper() in ["ADMIN", "ADMINISTRADOR"]:
+            user.role = "ADMIN"
+        else:
+            user.role = "STAFF"
         user.save()
         return UserType.from_model(user)
 
