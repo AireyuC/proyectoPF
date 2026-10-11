@@ -11,6 +11,7 @@ import {
   X, 
   Zap, 
   Activity,
+  BookOpen,
   Receipt,
   ShieldCheck,
   Store
@@ -57,6 +58,12 @@ const MainLayout: React.FC = () => {
       path: '/caja', 
       label: 'Arqueo de Caja', 
       icon: <DollarSign size={20} />, 
+      permission: 'caja.movimientos.ver' 
+    },
+    { 
+      path: '/contabilidad', 
+      label: 'Libro Contable', 
+      icon: <BookOpen size={20} />, 
       permission: 'caja.movimientos.ver' 
     },
     { 

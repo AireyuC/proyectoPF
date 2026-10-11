@@ -380,12 +380,16 @@ export const UPDATE_REPAIR_QUOTE = gql`
     $ticketNumber: String!
     $estimatedTotal: Float!
     $technicianNotes: String
+    $techObservations: String
+    $deliveryPromiseDate: String
     $status: String
   ) {
     updateRepairQuote(
       ticketNumber: $ticketNumber
       estimatedTotal: $estimatedTotal
       technicianNotes: $technicianNotes
+      techObservations: $techObservations
+      deliveryPromiseDate: $deliveryPromiseDate
       status: $status
     ) {
       id
@@ -395,6 +399,8 @@ export const UPDATE_REPAIR_QUOTE = gql`
       status
       statusDisplay
       technicianNotes
+      techObservations
+      deliveryPromiseDate
     }
   }
 `;
@@ -408,6 +414,39 @@ export const GENERATE_REPAIR_INVOICE = gql`
       invoicePdfKey
       invoicePdfUrl
       invoiceGeneratedAt
+    }
+  }
+`;
+
+// ==========================================
+// LIBRO CONTABLE INMUTABLE (ADMIN)
+// ==========================================
+export const GET_ACCOUNTING_LEDGER = gql`
+  query GetAccountingLedger($startDate: String, $endDate: String) {
+    accountingLedger(startDate: $startDate, endDate: $endDate) {
+      startDate
+      endDate
+      summary {
+        totalCashIn
+        totalQrIn
+        totalCashOut
+        totalRevenue
+        netProfit
+        totalEntriesCount
+      }
+      entries {
+        id
+        timestamp
+        entryType
+        concept
+        referenceCode
+        cashIn
+        qrIn
+        cashOut
+        netAmount
+        userOrTech
+        notes
+      }
     }
   }
 `;

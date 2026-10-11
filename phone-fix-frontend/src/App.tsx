@@ -13,6 +13,7 @@ import { CashClosePage } from './features/sales/pages/CashClosePage';
 import { ClientsPage } from './features/clients/pages/ClientsPage';
 import { UsersPage } from './features/staff/pages/UsersPage';
 import { SuppliersPage } from './features/workshop/pages/SuppliersPage';
+import { AccountingLedgerPage } from './features/sales/pages/AccountingLedgerPage';
 
 function App() {
   return (
@@ -53,6 +54,11 @@ function App() {
             {/* Arqueo de Caja */}
             <Route element={<PermissionRoute permission="caja.movimientos.ver" />}>
               <Route path="caja" element={<CashClosePage />} />
+            </Route>
+
+            {/* Libro Contable General Inmutable */}
+            <Route element={<PermissionRoute permission="caja.movimientos.ver" />}>
+              <Route path="contabilidad" element={<AccountingLedgerPage />} />
             </Route>
 
             {/* Clientes */}

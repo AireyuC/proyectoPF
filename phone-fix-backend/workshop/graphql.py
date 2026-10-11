@@ -385,6 +385,9 @@ class WorkshopMutation:
         if not order:
             return None
         
+        if order.status in [RepairOrder.Status.ENTREGADO_REPARADO, RepairOrder.Status.ENTREGADO_SIN_REPARAR, RepairOrder.Status.DECLARADO_ABANDONO]:
+            raise PermissionError("Esta orden ya ha sido entregada y cerrada. Los datos de reparación son inmutables.")
+
         order.status = status
         if technician_notes is not None:
             order.technician_notes = technician_notes
@@ -396,6 +399,9 @@ class WorkshopMutation:
     @strawberry.mutation
     def add_repair_part(self, input: AddRepairPartInput) -> RepairPartItemType:
         order = RepairOrder.objects.get(ticket_number=input.ticket_number)
+        if order.status in [RepairOrder.Status.ENTREGADO_REPARADO, RepairOrder.Status.ENTREGADO_SIN_REPARAR, RepairOrder.Status.DECLARADO_ABANDONO]:
+            raise PermissionError("Esta orden ya ha sido entregada y cerrada. No se pueden agregar repuestos adicionales.")
+
         product = Product.objects.filter(id=input.product_id).first() if input.product_id else None
         supplier = Supplier.objects.filter(id=input.supplier_id).first() if input.supplier_id else None
 
@@ -508,16 +514,31 @@ class WorkshopMutation:
         ticket_number: str,
         estimated_total: float,
         technician_notes: Optional[str] = None,
+        tech_observations: Optional[str] = None,
+        delivery_promise_date: Optional[str] = None,
         status: Optional[str] = None
     ) -> Optional[RepairOrderType]:
-        """Permite fijar o actualizar el presupuesto cotizado tras el diagnóstico o consulta con casetas"""
+        """Permite fijar o actualizar el presupuesto cotizado, fecha prometida y notas internas tras el diagnóstico"""
         order = RepairOrder.objects.filter(ticket_number=ticket_number).select_related('client', 'device', 'supplier').prefetch_related('parts').first()
         if not order:
             return None
 
+        if order.status in [RepairOrder.Status.ENTREGADO_REPARADO, RepairOrder.Status.ENTREGADO_SIN_REPARAR, RepairOrder.Status.DECLARADO_ABANDONO]:
+            raise PermissionError("Esta orden ya ha sido entregada y cerrada. Los datos de reparación son inmutables.")
+
         order.estimated_total = Decimal(str(estimated_total))
         if technician_notes is not None:
             order.technician_notes = technician_notes
+        if tech_observations is not None:
+            order.tech_observations = tech_observations
+        if delivery_promise_date is not None:
+            if delivery_promise_date.strip():
+                try:
+                    order.delivery_promise_date = datetime.strptime(delivery_promise_date.strip(), "%Y-%m-%d").date()
+                except Exception:
+                    pass
+            else:
+                order.delivery_promise_date = None
         if status:
             order.status = status
         order.save()

@@ -1,13 +1,65 @@
 import strawberry
 from typing import Optional, List
 from decimal import Decimal
+from datetime import datetime, date, timedelta
 from django.utils import timezone
 from django.db import transaction
 from django.db.models import Sum, Q
 from .models import Sale, SaleItem, CashClose
 from inventory.models import Product
-from workshop.models import RepairOrder
+from workshop.models import RepairOrder, RepairPartItem
 from core.auth_graphql import get_user_from_jwt
+
+def parse_date_range(start_str: Optional[str], end_str: Optional[str]):
+    now = timezone.now()
+    if start_str:
+        try:
+            start_d = datetime.strptime(start_str.strip(), "%Y-%m-%d").date()
+            start_dt = timezone.make_aware(datetime.combine(start_d, datetime.min.time()))
+        except Exception:
+            start_dt = now - timedelta(days=30)
+    else:
+        start_dt = now - timedelta(days=30)
+
+    if end_str:
+        try:
+            end_d = datetime.strptime(end_str.strip(), "%Y-%m-%d").date()
+            end_dt = timezone.make_aware(datetime.combine(end_d, datetime.max.time()))
+        except Exception:
+            end_dt = now
+    else:
+        end_dt = now
+    return start_dt, end_dt
+
+@strawberry.type
+class LedgerEntryType:
+    id: str
+    timestamp: str
+    entry_type: str
+    concept: str
+    reference_code: str
+    cash_in: float
+    qr_in: float
+    cash_out: float
+    net_amount: float
+    user_or_tech: str
+    notes: Optional[str] = None
+
+@strawberry.type
+class LedgerSummaryType:
+    total_cash_in: float
+    total_qr_in: float
+    total_cash_out: float
+    total_revenue: float
+    net_profit: float
+    total_entries_count: int
+
+@strawberry.type
+class AccountingLedgerType:
+    start_date: str
+    end_date: str
+    summary: LedgerSummaryType
+    entries: List[LedgerEntryType]
 
 @strawberry.type
 class SaleItemType:
@@ -187,6 +239,168 @@ class SalesQuery:
             today_refunds_cash=float(refunds_cash),
             expected_drawer_cash=float(expected_cash),
             expected_bank_qr=float(expected_qr)
+        )
+
+    @strawberry.field
+    def accounting_ledger(
+        self,
+        info: strawberry.Info,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> AccountingLedgerType:
+        """Libro Contable General Inmutable: Consolida ingresos y egresos de mostrador y taller"""
+        request = info.context.request
+        user = get_user_from_jwt(request)
+        if not user or not (user.is_admin() or user.has_perm_code("caja.movimientos.ver")):
+            raise PermissionError("Acceso denegado: Se requiere rol de Administrador para auditar el Libro Contable General.")
+
+        start_dt, end_dt = parse_date_range(start_date, end_date)
+        entries: List[LedgerEntryType] = []
+
+        # 1. Ventas de Mostrador (Sale)
+        sales_qs = Sale.objects.filter(
+            created_at__gte=start_dt,
+            created_at__lte=end_dt
+        ).select_related('user').prefetch_related('items')
+
+        for s in sales_qs:
+            c_in = float(s.payment_cash)
+            q_in = float(s.payment_qr)
+            entries.append(LedgerEntryType(
+                id=f"SALE-{s.id}",
+                timestamp=s.created_at.isoformat(),
+                entry_type="VENTA_MOSTRADOR",
+                concept=f"Venta de Mostrador POS #{s.id}",
+                reference_code=f"VTA-{s.id}",
+                cash_in=c_in,
+                qr_in=q_in,
+                cash_out=0.0,
+                net_amount=c_in + q_in,
+                user_or_tech=s.user.username if s.user else "Cajero",
+                notes=f"{s.items.count()} producto(s)"
+            ))
+
+        # 2. Señas de Taller (RepairOrder)
+        deposits_qs = RepairOrder.objects.filter(
+            Q(deposit_date__gte=start_dt, deposit_date__lte=end_dt) |
+            Q(deposit_date__isnull=True, created_at__gte=start_dt, created_at__lte=end_dt)
+        ).filter(
+            Q(deposit_cash__gt=0) | Q(deposit_qr__gt=0)
+        ).select_related('client', 'device')
+
+        for r in deposits_qs:
+            ts = r.deposit_date if r.deposit_date else r.created_at
+            c_in = float(r.deposit_cash)
+            q_in = float(r.deposit_qr)
+            entries.append(LedgerEntryType(
+                id=f"REP-DEP-{r.ticket_number}",
+                timestamp=ts.isoformat(),
+                entry_type="SEÑA_TALLER",
+                concept=f"Seña Inicial - Orden {r.ticket_number} ({r.device.brand} {r.device.model} - {r.client.full_name})",
+                reference_code=r.ticket_number,
+                cash_in=c_in,
+                qr_in=q_in,
+                cash_out=0.0,
+                net_amount=c_in + q_in,
+                user_or_tech="Recepción",
+                notes=r.issue_description
+            ))
+
+        # 3. Liquidaciones Finales de Taller (RepairOrder entregadas)
+        deliveries_qs = RepairOrder.objects.filter(
+            delivered_at__gte=start_dt,
+            delivered_at__lte=end_dt
+        ).filter(
+            Q(final_payment_cash__gt=0) | Q(final_payment_qr__gt=0)
+        ).select_related('client', 'device')
+
+        for r in deliveries_qs:
+            c_in = float(r.final_payment_cash)
+            q_in = float(r.final_payment_qr)
+            entries.append(LedgerEntryType(
+                id=f"REP-FIN-{r.ticket_number}",
+                timestamp=r.delivered_at.isoformat(),
+                entry_type="ENTREGA_TALLER",
+                concept=f"Liquidación Final - Orden {r.ticket_number} ({r.device.brand} {r.device.model} - {r.client.full_name})",
+                reference_code=r.ticket_number,
+                cash_in=c_in,
+                qr_in=q_in,
+                cash_out=0.0,
+                net_amount=c_in + q_in,
+                user_or_tech="Taller / Entrega",
+                notes=r.technician_notes or "Entrega final de equipo reparado"
+            ))
+
+        # 4. Compras de Repuestos a Casetas / Proveedores Externos
+        parts_qs = RepairPartItem.objects.filter(
+            source_type=RepairPartItem.SourceType.EXTERNAL,
+            cost__gt=0,
+            repair_order__created_at__gte=start_dt,
+            repair_order__created_at__lte=end_dt
+        ).select_related('repair_order', 'supplier')
+
+        for p in parts_qs:
+            c_out = float(p.cost)
+            entries.append(LedgerEntryType(
+                id=f"REP-PART-{p.id}",
+                timestamp=p.repair_order.created_at.isoformat(),
+                entry_type="COMPRA_REPUESTO_CASETA",
+                concept=f"Compra Repuesto: {p.name} (Orden {p.repair_order.ticket_number})",
+                reference_code=p.repair_order.ticket_number,
+                cash_in=0.0,
+                qr_in=0.0,
+                cash_out=c_out,
+                net_amount=-c_out,
+                user_or_tech=p.supplier.name if p.supplier else "Caseta Externa",
+                notes=f"Proveedor: {p.supplier.name if p.supplier else 'Caseta local'} - Pagado: {'Sí' if p.is_paid else 'Pendiente'}"
+            ))
+
+        # 5. Devoluciones de Señas
+        refunds_qs = RepairOrder.objects.filter(
+            delivered_at__gte=start_dt,
+            delivered_at__lte=end_dt,
+            deposit_refunded__gt=0
+        ).select_related('client', 'device')
+
+        for r in refunds_qs:
+            c_out = float(r.deposit_refunded)
+            entries.append(LedgerEntryType(
+                id=f"REP-REF-{r.ticket_number}",
+                timestamp=r.delivered_at.isoformat(),
+                entry_type="DEVOLUCION_SEÑA",
+                concept=f"Devolución de Seña - Orden {r.ticket_number} ({r.client.full_name})",
+                reference_code=r.ticket_number,
+                cash_in=0.0,
+                qr_in=0.0,
+                cash_out=c_out,
+                net_amount=-c_out,
+                user_or_tech="Caja / Recepción",
+                notes=r.tech_observations or "Devolución por no aceptación o falta de repuesto"
+            ))
+
+        # Ordenar por timestamp descendente
+        entries.sort(key=lambda e: e.timestamp, reverse=True)
+
+        tot_cash_in = sum(e.cash_in for e in entries)
+        tot_qr_in = sum(e.qr_in for e in entries)
+        tot_cash_out = sum(e.cash_out for e in entries)
+        tot_revenue = tot_cash_in + tot_qr_in
+        net_prof = tot_revenue - tot_cash_out
+
+        summary = LedgerSummaryType(
+            total_cash_in=tot_cash_in,
+            total_qr_in=tot_qr_in,
+            total_cash_out=tot_cash_out,
+            total_revenue=tot_revenue,
+            net_profit=net_prof,
+            total_entries_count=len(entries)
+        )
+
+        return AccountingLedgerType(
+            start_date=start_dt.date().isoformat(),
+            end_date=end_dt.date().isoformat(),
+            summary=summary,
+            entries=entries
         )
 
 @strawberry.type

@@ -42,7 +42,8 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
 
   // Estados de edición rápida y cotización
   const [techNotes, setTechNotes] = useState(order?.technicianNotes || '');
-  const [techObs] = useState(order?.techObservations || '');
+  const [techObs, setTechObs] = useState(order?.techObservations || '');
+  const [deliveryPromiseDate, setDeliveryPromiseDate] = useState(order?.deliveryPromiseDate || '');
   const [quoteAmount, setQuoteAmount] = useState<number | ''>(order?.estimatedTotal || 0);
   const [quoteNotes, setQuoteNotes] = useState(order?.technicianNotes || '');
   
@@ -56,6 +57,9 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
   const [refundCash, setRefundCash] = useState<number | ''>(order?.depositCash || 0);
   const [refundReason, setRefundReason] = useState('');
 
+  // Inmutabilidad si ya fue entregada
+  const isOrderClosed = ['ENTREGADO_REPARADO', 'ENTREGADO_SIN_REPARAR', 'DECLARADO_ABANDONO'].includes(order?.status);
+
   // Mutaciones
   const [updateStatusMutation] = useMutation<any>(UPDATE_REPAIR_STATUS);
   const [deliverMutation] = useMutation<any>(DELIVER_REPAIR_ORDER);
@@ -67,6 +71,8 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
   useEffect(() => {
     if (order) {
       setTechNotes(order.technicianNotes || '');
+      setTechObs(order.techObservations || '');
+      setDeliveryPromiseDate(order.deliveryPromiseDate || '');
       setQuoteAmount(order.estimatedTotal || 0);
       setQuoteNotes(order.technicianNotes || '');
       setFinalCash(order.remainingBalance || 0);
@@ -77,6 +83,7 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
   if (!isOpen || !order) return null;
 
   const handleStatusChange = async (newStatus: string) => {
+    if (isOrderClosed) return;
     await updateStatusMutation({
       variables: {
         ticketNumber: order.ticketNumber,
@@ -88,16 +95,33 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
     onRefresh?.();
   };
 
+  const handleSaveNotes = async () => {
+    if (isOrderClosed) return;
+    await updateStatusMutation({
+      variables: {
+        ticketNumber: order.ticketNumber,
+        status: order.status,
+        technicianNotes: techNotes,
+        techObservations: techObs
+      }
+    });
+    onRefresh?.();
+  };
+
   const handleUpdateQuote = async (newStatus?: string) => {
+    if (isOrderClosed) return;
     await updateQuoteMutation({
       variables: {
         ticketNumber: order.ticketNumber,
         estimatedTotal: Number(quoteAmount || 0),
         technicianNotes: quoteNotes,
+        techObservations: techObs,
+        deliveryPromiseDate: deliveryPromiseDate || null,
         status: newStatus || order.status
       }
     });
     onRefresh?.();
+    onClose(); // Cierra automáticamente al aplicar cotización
   };
 
   const handleGenerateInvoice = async () => {
@@ -190,6 +214,33 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
           </Can>
         )}
 
+        {/* ALERTA DE INMUTABILIDAD SI LA ORDEN YA FUE ENTREGADA / CERRADA */}
+        {isOrderClosed && (
+          <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-700/80 text-slate-300 text-xs flex items-center justify-between gap-3 shadow-lg">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">🔒</span>
+              <div>
+                <h4 className="font-bold text-white text-xs">
+                  Orden Finalizada y Cerrada ({order.statusDisplay})
+                </h4>
+                <p className="text-[11px] text-slate-400">
+                  Esta orden se encuentra en modo estrictamente de SOLO LECTURA para garantizar la inmutabilidad contable y de auditoría.
+                </p>
+              </div>
+            </div>
+            {order.invoicePdfUrl && (
+              <a
+                href={order.invoicePdfUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="px-3.5 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 rounded-xl font-bold text-xs flex items-center gap-1.5 shrink-0 transition"
+              >
+                <Printer size={13} /> Ver Factura PDF
+              </a>
+            )}
+          </div>
+        )}
+
         {/* Header Superior del Equipo y Cliente */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-[#131926] border border-[#1E293B]">
           <div className="flex items-center gap-3.5">
@@ -219,8 +270,8 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Botón Discreto de Abandono (Solo si NO es crítico >= 90d) */}
-            {!order.isAbandonmentEligible && !order.isAbandoned && (
+            {/* Botón Discreto de Abandono (Solo si NO es crítico >= 90d y no está cerrada) */}
+            {!isOrderClosed && !order.isAbandonmentEligible && !order.isAbandoned && (
               <Can permission="taller.ordenes.declarar_abandono">
                 <button
                   onClick={handleAbandon}
@@ -233,9 +284,10 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
             )}
 
             <select
+              disabled={isOrderClosed}
               value={order.status}
               onChange={e => handleStatusChange(e.target.value)}
-              className="px-3 py-2 bg-[#0D121F] border border-[#00E5FF]/40 rounded-xl text-xs font-bold text-[#00E5FF] outline-none glow-cyan-subtle cursor-pointer"
+              className="px-3 py-2 bg-[#0D121F] border border-[#00E5FF]/40 rounded-xl text-xs font-bold text-[#00E5FF] outline-none glow-cyan-subtle cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <option value="RECIBIDO">Recibido en Recepción</option>
               <option value="DIAGNOSTICO">En Diagnóstico</option>
@@ -301,7 +353,7 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
         {activeTab === 'GENERAL' && (
           <div className="space-y-4 text-xs">
 
-            {/* PANEL DE COTIZACIÓN DINÁMICA (PERMITE FIJAR O CAMBIAR PRECIO) */}
+            {/* PANEL DE COTIZACIÓN DINÁMICA (PERMITE FIJAR O CAMBIAR PRECIO Y FECHA ENTREGA) */}
             <div className={`p-4 rounded-xl border transition-all ${
               order.estimatedTotal === 0 || order.status === 'DIAGNOSTICO' || order.status === 'ESPERA_CLIENTE'
                 ? 'bg-amber-500/10 border-amber-500/30'
@@ -316,12 +368,12 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                   </span>
                   <div>
                     <h4 className="font-bold text-white text-xs uppercase tracking-wide">
-                      Gestión de Presupuesto y Cotización
+                      Gestión de Presupuesto y Fecha de Entrega
                     </h4>
                     <p className="text-[11px] text-slate-300">
                       {order.estimatedTotal === 0 
                         ? '⚠️ El equipo ingresó con Bs. 0 (Pendiente de Diagnóstico o Consulta a Proveedor).' 
-                        : 'Actualiza el monto cotizado cuando el proveedor confirme precios o si el cliente autoriza.'}
+                        : 'Actualiza el monto cotizado y la fecha de entrega prometida tras abrir el equipo.'}
                     </p>
                   </div>
                 </div>
@@ -334,7 +386,8 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3">
+                {/* 1. Presupuesto */}
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-300 mb-1">
                     Presupuesto Cotizado Real (Bs.)
@@ -342,85 +395,104 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                   <div className="relative">
                     <input
                       type="number"
+                      disabled={isOrderClosed}
                       min="0"
                       step="0.5"
                       value={quoteAmount}
                       onChange={e => setQuoteAmount(e.target.value === '' ? '' : parseFloat(e.target.value))}
                       placeholder="0.00"
-                      className="w-full px-3 py-2 bg-[#0D121F] border border-slate-700 focus:border-cyan-400 rounded-xl text-white font-bold text-sm outline-none"
+                      className="w-full px-3 py-2 bg-[#0D121F] border border-slate-700 focus:border-cyan-400 rounded-xl text-white font-bold text-sm outline-none disabled:opacity-50"
                     />
                     <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">Bs.</span>
                   </div>
                 </div>
 
+                {/* 2. Fecha Prometida de Entrega */}
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                    Trabajo / Pieza Cotizada (Para aviso al cliente)
+                    Fecha Prometida de Entrega
+                  </label>
+                  <input
+                    type="date"
+                    disabled={isOrderClosed}
+                    value={deliveryPromiseDate}
+                    onChange={e => setDeliveryPromiseDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-[#0D121F] border border-slate-700 focus:border-cyan-400 rounded-xl text-white font-bold text-xs outline-none disabled:opacity-50"
+                  />
+                </div>
+
+                {/* 3. Trabajo Cotizado */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                    Trabajo Autorizado por Cliente
                   </label>
                   <input
                     type="text"
+                    disabled={isOrderClosed}
                     value={quoteNotes}
                     onChange={e => setQuoteNotes(e.target.value)}
-                    placeholder="Ej: Cambio de pantalla OLED + mano de obra"
-                    className="w-full px-3 py-2 bg-[#0D121F] border border-slate-700 focus:border-cyan-400 rounded-xl text-white text-xs outline-none"
+                    placeholder="Ej: Cambio de pantalla OLED + limpieza"
+                    className="w-full px-3 py-2 bg-[#0D121F] border border-slate-700 focus:border-cyan-400 rounded-xl text-white text-xs outline-none disabled:opacity-50"
                   />
                 </div>
               </div>
 
               {/* Botones de Decisión y WhatsApp */}
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-800">
-                <a
-                  href={createWhatsAppLink(
-                    order.clientPhone, 
-                    `Hola ${order.clientName}, te escribimos de PhoneFix Montero. Ya revisamos tu equipo ${order.device?.brand} ${order.device?.model} (Ticket #${order.ticketNumber}). El presupuesto de reparación es de Bs. ${quoteAmount || 0} por ${quoteNotes || order.issueDescription}. Por favor indícanos si autorizas realizar el trabajo.`
-                  )}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3.5 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 font-bold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
-                >
-                  <MessageCircle size={14} />
-                  Enviar Cotización por WhatsApp
-                </a>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={updatingQuote}
-                    onClick={() => handleUpdateQuote('RECHAZADO_ESPERA')}
-                    className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 font-bold rounded-xl text-xs transition cursor-pointer"
-                    title="Marcar como rechazado"
+              {!isOrderClosed && (
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-800">
+                  <a
+                    href={createWhatsAppLink(
+                      order.clientPhone, 
+                      `Hola ${order.clientName}, te escribimos de PhoneFix Montero. Ya revisamos tu equipo ${order.device?.brand} ${order.device?.model} (Ticket #${order.ticketNumber}). El presupuesto de reparación es de Bs. ${quoteAmount || 0} por ${quoteNotes || order.issueDescription}${deliveryPromiseDate ? ` con entrega estimada para el ${deliveryPromiseDate}` : ''}. Por favor indícanos si autorizas realizar el trabajo.`
+                    )}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3.5 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 font-bold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
                   >
-                    ❌ Rechazó Presupuesto
-                  </button>
+                    <MessageCircle size={14} />
+                    Enviar Cotización por WhatsApp
+                  </a>
 
-                  <button
-                    type="button"
-                    disabled={updatingQuote}
-                    onClick={() => handleUpdateQuote('EN_PROCESO')}
-                    className="px-3.5 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-400 font-extrabold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer shadow-md"
-                    title="Actualizar monto y pasar a En Reparación"
-                  >
-                    <Check size={14} />
-                    ✅ Cliente Aceptó (En Reparación)
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={updatingQuote}
+                      onClick={() => handleUpdateQuote('RECHAZADO_ESPERA')}
+                      className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 font-bold rounded-xl text-xs transition cursor-pointer"
+                      title="Marcar como rechazado y cerrar"
+                    >
+                      ❌ Rechazó Presupuesto
+                    </button>
 
-                  <button
-                    type="button"
-                    disabled={updatingQuote}
-                    onClick={() => handleUpdateQuote()}
-                    className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs transition cursor-pointer"
-                  >
-                    {updatingQuote ? 'Guardando...' : '💾 Guardar Cotización'}
-                  </button>
+                    <button
+                      type="button"
+                      disabled={updatingQuote}
+                      onClick={() => handleUpdateQuote('EN_PROCESO')}
+                      className="px-3.5 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-400 font-extrabold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer shadow-md"
+                      title="Actualizar monto y pasar a En Reparación (Cierra ventana)"
+                    >
+                      <Check size={14} />
+                      ✅ Cliente Autorizó Trabajo
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={updatingQuote}
+                      onClick={() => handleUpdateQuote()}
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs transition cursor-pointer"
+                    >
+                      {updatingQuote ? 'Guardando...' : '💾 Guardar Cotización'}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Falla declarada */}
               <div className="p-4 rounded-xl bg-[#131926] border border-[#1E293B] space-y-2">
                 <p className="text-[#94A3B8] font-bold uppercase tracking-wider text-[10px]">
-                  Falla Declarada por Cliente
+                  Falla Declarada en Recepción
                 </p>
                 <p className="text-white text-sm">
                   {order.issueDescription}
@@ -448,24 +520,47 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
             {/* Diagnóstico técnico */}
             <div className="p-4 rounded-xl bg-[#131926] border border-[#1E293B] space-y-2">
               <label className="text-[#94A3B8] font-bold uppercase tracking-wider text-[10px]">
-                Notas Técnicas / Trabajo a Realizar
+                Diagnóstico Técnico / Defectos Detectados en Laboratorio
               </label>
               <textarea
                 rows={3}
+                disabled={isOrderClosed}
                 value={techNotes}
                 onChange={e => setTechNotes(e.target.value)}
-                placeholder="Observaciones de laboratorio, transplante de IC, microscopio..."
-                className="w-full p-3 bg-[#0D121F] border border-[#1E293B] rounded-xl text-white outline-none focus:border-[#00E5FF] resize-none"
+                placeholder="Detalle de fallas encontradas al desmontar el equipo, componentes dañados, sugerencias..."
+                className="w-full p-3 bg-[#0D121F] border border-[#1E293B] rounded-xl text-white outline-none focus:border-[#00E5FF] resize-none disabled:opacity-50"
               />
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => handleStatusChange(order.status)}
-                  className="px-4 py-2 bg-[#00E5FF]/10 text-[#00E5FF] hover:bg-[#00E5FF]/20 border border-[#00E5FF]/30 rounded-xl font-bold transition-all cursor-pointer"
-                >
-                  Guardar Diagnóstico
-                </button>
+            </div>
+
+            {/* ESPACIO EXCLUSIVO DE OBSERVACIONES INTERNAS PARA EL PERSONAL */}
+            <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/30 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-amber-400 font-bold uppercase tracking-wider text-[10px] flex items-center gap-2">
+                  <span>🔒 Observaciones Internas del Personal</span>
+                  <span className="px-2 py-0.5 rounded text-[9px] bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                    Estrictamente Privado • No sale en Comprobante / Factura
+                  </span>
+                </label>
               </div>
+              <textarea
+                rows={2}
+                disabled={isOrderClosed}
+                value={techObs}
+                onChange={e => setTechObs(e.target.value)}
+                placeholder="Anotaciones privadas del personal: placa delicada, cliente conflictivo, pruebas internas, etc..."
+                className="w-full p-3 bg-[#0D121F] border border-amber-500/20 rounded-xl text-amber-100 placeholder-slate-500 text-xs outline-none focus:border-amber-400 resize-none disabled:opacity-50"
+              />
+              {!isOrderClosed && (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleSaveNotes}
+                    className="px-4 py-2 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 rounded-xl font-bold transition-all cursor-pointer"
+                  >
+                    💾 Guardar Notas & Observaciones
+                  </button>
+                </div>
+              )}
             </div>
 
           </div>
@@ -480,14 +575,16 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
               <h4 className="font-bold text-white uppercase tracking-wider text-[11px]">
                 Desglose de Piezas y Mano de Obra Imputadas
               </h4>
-              <button
-                type="button"
-                onClick={() => setIsAddPartOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#00E5FF] text-[#080B11] font-bold rounded-xl shadow-md hover:brightness-110 transition-all cursor-pointer text-xs"
-              >
-                <Plus size={14} />
-                Agregar Pieza o Gasto
-              </button>
+              {!isOrderClosed && (
+                <button
+                  type="button"
+                  onClick={() => setIsAddPartOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#00E5FF] text-[#080B11] font-bold rounded-xl shadow-md hover:brightness-110 transition-all cursor-pointer text-xs"
+                >
+                  <Plus size={14} />
+                  Agregar Pieza o Gasto
+                </button>
+              )}
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-[#1E293B]">
@@ -620,124 +717,134 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              
-              {/* Opción A: Entregar Reparado */}
-              <div className="p-5 rounded-2xl bg-[#131926] border border-[#1E293B] space-y-4">
-                <div className="flex items-center gap-2 text-[#10B981] font-bold text-sm">
-                  <CheckCircle size={18} />
-                  <span>Cobro de Saldo & Entrega Conforme</span>
-                </div>
+            {!isOrderClosed ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* Opción A: Entregar Reparado */}
+                <div className="p-5 rounded-2xl bg-[#131926] border border-[#1E293B] space-y-4">
+                  <div className="flex items-center gap-2 text-[#10B981] font-bold text-sm">
+                    <CheckCircle size={18} />
+                    <span>Cobro de Saldo & Entrega Conforme</span>
+                  </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="block text-[#94A3B8] font-semibold">
+                        Saldo Efectivo (Bs.)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        value={finalCash}
+                        onChange={e => setFinalCash(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                        className="w-full px-3 py-2 bg-[#0D121F] border border-[#1E293B] rounded-xl text-white outline-none focus:border-[#00E5FF]"
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-[#94A3B8] font-semibold">
+                        Saldo QR / Banco (Bs.)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        value={finalQr}
+                        onChange={e => setFinalQr(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                        className="w-full px-3 py-2 bg-[#0D121F] border border-[#1E293B] rounded-xl text-white outline-none focus:border-[#00E5FF]"
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Selección de Garantía */}
                   <div className="space-y-1.5">
                     <label className="block text-[#94A3B8] font-semibold">
-                      Saldo Efectivo (Bs.)
+                      Póliza de Garantía Otorgada
                     </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      value={finalCash}
-                      onChange={e => setFinalCash(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                    <select
+                      value={warrantyChoice}
+                      onChange={e => setWarrantyChoice(e.target.value)}
                       className="w-full px-3 py-2 bg-[#0D121F] border border-[#1E293B] rounded-xl text-white outline-none focus:border-[#00E5FF]"
-                      placeholder="0.00"
-                    />
+                    >
+                      <option value="3_SEMANAS">3 Semanas (Estándar de Taller)</option>
+                      <option value="2_SEMANAS">2 Semanas</option>
+                      <option value="1_MES">1 Mes</option>
+                      <option value="3_MESES">3 Meses (Pantallas OLED / Calidad Original)</option>
+                      <option value="SIN_GARANTIA">Sin Garantía</option>
+                    </select>
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="block text-[#94A3B8] font-semibold">
-                      Saldo QR / Banco (Bs.)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      value={finalQr}
-                      onChange={e => setFinalQr(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                      className="w-full px-3 py-2 bg-[#0D121F] border border-[#1E293B] rounded-xl text-white outline-none focus:border-[#00E5FF]"
-                      placeholder="0.00"
-                    />
-                  </div>
-                </div>
 
-                {/* Selección de Garantía */}
-                <div className="space-y-1.5">
-                  <label className="block text-[#94A3B8] font-semibold">
-                    Póliza de Garantía Otorgada
-                  </label>
-                  <select
-                    value={warrantyChoice}
-                    onChange={e => setWarrantyChoice(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0D121F] border border-[#1E293B] rounded-xl text-white outline-none focus:border-[#00E5FF]"
+                  <button
+                    type="button"
+                    onClick={() => handleDeliver(true)}
+                    className="w-full py-3 bg-gradient-to-r from-[#10B981] to-[#059669] text-white font-extrabold rounded-xl shadow-lg shadow-[#10B981]/20 flex items-center justify-center gap-2 cursor-pointer transition-all hover:brightness-110"
                   >
-                    <option value="3_SEMANAS">3 Semanas (Estándar de Taller)</option>
-                    <option value="2_SEMANAS">2 Semanas</option>
-                    <option value="1_MES">1 Mes</option>
-                    <option value="3_MESES">3 Meses (Pantallas OLED / Calidad Original)</option>
-                    <option value="SIN_GARANTIA">Sin Garantía</option>
-                  </select>
+                    <CheckCircle size={16} />
+                    Entregar Reparado & Finalizar Ticket
+                  </button>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleDeliver(true)}
-                  className="w-full py-3 bg-gradient-to-r from-[#10B981] to-[#059669] text-white font-extrabold rounded-xl shadow-lg shadow-[#10B981]/20 flex items-center justify-center gap-2 cursor-pointer transition-all hover:brightness-110"
-                >
-                  <CheckCircle size={16} />
-                  Entregar Reparado & Finalizar Ticket
-                </button>
+                {/* Opción B: Devolver Sin Reparar / Devolución de Seña */}
+                <div className="p-5 rounded-2xl bg-[#131926] border border-[#1E293B] space-y-4">
+                  <div className="flex items-center gap-2 text-red-400 font-bold text-sm">
+                    <XCircle size={18} />
+                    <span>Sin Solución / Rechazado</span>
+                  </div>
+
+                  <p className="text-[#94A3B8] text-[11px]">
+                    Si el equipo no tiene arreglo o el cliente rechazó la cotización, se devuelve el dispositivo sin garantía. Si dejó seña, se registra la devolución correspondiente.
+                  </p>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-[#94A3B8] font-semibold">
+                      Devolución de Seña en Efectivo (Bs.)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={refundCash}
+                      onChange={e => setRefundCash(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                      className="w-full px-3 py-2 bg-[#0D121F] border border-[#1E293B] rounded-xl text-white outline-none focus:border-red-400"
+                      placeholder="0.00"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-[#94A3B8] font-semibold">
+                      Motivo de la Devolución
+                    </label>
+                    <input
+                      type="text"
+                      value={refundReason}
+                      onChange={e => setRefundReason(e.target.value)}
+                      placeholder="Ej. Placa en corto, repuesto no disponible..."
+                      className="w-full px-3 py-2 bg-[#0D121F] border border-[#1E293B] rounded-xl text-white outline-none focus:border-red-400"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleRefund}
+                    className="w-full py-3 bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 font-bold rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all"
+                  >
+                    <XCircle size={16} />
+                    Devolver Sin Reparar & Devolver Seña
+                  </button>
+                </div>
+
               </div>
-
-              {/* Opción B: Devolver Sin Reparar / Devolución de Seña */}
-              <div className="p-5 rounded-2xl bg-[#131926] border border-[#1E293B] space-y-4">
-                <div className="flex items-center gap-2 text-red-400 font-bold text-sm">
-                  <XCircle size={18} />
-                  <span>Sin Solución / Rechazado</span>
-                </div>
-
-                <p className="text-[#94A3B8] text-[11px]">
-                  Si el equipo no tiene arreglo o el cliente rechazó la cotización, se devuelve el dispositivo sin garantía. Si dejó seña, se registra la devolución correspondiente.
+            ) : (
+              <div className="p-8 rounded-2xl bg-[#0D121F] border border-slate-800 text-center space-y-2">
+                <CheckCircle size={36} className="text-emerald-400 mx-auto" />
+                <h4 className="font-extrabold text-white text-base">Equipo Entregado y Liquidado</h4>
+                <p className="text-xs text-slate-400 max-w-md mx-auto">
+                  Este equipo ya concluyó su ciclo de taller. Si necesitas una copia del comprobante o historial de garantía, utiliza el botón de impresión superior.
                 </p>
-
-                <div className="space-y-1.5">
-                  <label className="block text-[#94A3B8] font-semibold">
-                    Devolución de Seña en Efectivo (Bs.)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value={refundCash}
-                    onChange={e => setRefundCash(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                    className="w-full px-3 py-2 bg-[#0D121F] border border-[#1E293B] rounded-xl text-white outline-none focus:border-red-400"
-                    placeholder="0.00"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-[#94A3B8] font-semibold">
-                    Motivo de la Devolución
-                  </label>
-                  <input
-                    type="text"
-                    value={refundReason}
-                    onChange={e => setRefundReason(e.target.value)}
-                    placeholder="Ej. Placa en corto, repuesto no disponible..."
-                    className="w-full px-3 py-2 bg-[#0D121F] border border-[#1E293B] rounded-xl text-white outline-none focus:border-red-400"
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleRefund}
-                  className="w-full py-3 bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 font-bold rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all"
-                >
-                  <XCircle size={16} />
-                  Devolver Sin Reparar & Devolver Seña
-                </button>
               </div>
-
-            </div>
+            )}
           </div>
         )}
 
