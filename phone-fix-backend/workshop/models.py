@@ -69,9 +69,10 @@ class RepairOrder(models.Model):
     client = models.ForeignKey('clients.Client', on_delete=models.PROTECT, related_name='repairs', verbose_name="Cliente")
     device = models.OneToOneField(Device, on_delete=models.CASCADE, verbose_name="Dispositivo")
     
-    # Falla, Diagnóstico y Observaciones
+    # Falla, Diagnóstico, Autorización y Observaciones
     issue_description = models.TextField(verbose_name="Falla declarada por cliente")
-    technician_notes = models.TextField(blank=True, null=True, verbose_name="Diagnóstico técnico / Trabajo a realizar")
+    technician_notes = models.TextField(blank=True, null=True, verbose_name="Diagnóstico técnico / Hallazgos de laboratorio")
+    authorized_work = models.TextField(blank=True, null=True, verbose_name="Trabajo autorizado por el cliente")
     tech_observations = models.CharField(max_length=255, blank=True, null=True, verbose_name="Observaciones Técnicas (Ej: Transplante de EPROM)")
 
     # Garantía (3 semanas por defecto si se repara, corre desde fecha de retiro)

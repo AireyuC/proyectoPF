@@ -8,6 +8,8 @@ interface AddLineItemModalProps {
   isOpen: boolean;
   onClose: () => void;
   ticketNumber: string;
+  budgetCap?: number;
+  currentCost?: number;
   onSuccess?: () => void;
 }
 
@@ -15,6 +17,8 @@ export const AddLineItemModal: React.FC<AddLineItemModalProps> = ({
   isOpen,
   onClose,
   ticketNumber,
+  budgetCap = 0,
+  currentCost = 0,
   onSuccess
 }) => {
   const [sourceType, setSourceType] = useState<'INTERNAL' | 'EXTERNAL'>('INTERNAL');
@@ -196,6 +200,20 @@ export const AddLineItemModal: React.FC<AddLineItemModalProps> = ({
               className="w-full px-3.5 py-2.5 bg-[#131926] border border-[#1E293B] rounded-xl text-white placeholder-[#64748B] outline-none focus:border-[#00E5FF]"
             />
           </div>
+
+          {/* Indicador de Presupuesto Aprobado */}
+          {budgetCap > 0 && (
+            <div className="p-3 bg-[#0D121F] rounded-xl border border-slate-800 text-[11px] flex items-center justify-between">
+              <span className="text-slate-400">Presupuesto Aprobado: <strong className="text-white font-mono">Bs. {budgetCap}</strong></span>
+              <span className="text-slate-400">Gasto Actual: <strong className={`font-mono ${currentCost > budgetCap ? 'text-red-400' : 'text-cyan-400'}`}>Bs. {currentCost}</strong></span>
+            </div>
+          )}
+
+          {budgetCap > 0 && Number(cost || 0) + currentCost > budgetCap && (
+            <div className="p-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-300 text-[11px] font-bold flex items-center gap-1.5">
+              <span>⚠️ Este gasto superará el presupuesto acordado con el cliente (Bs. {budgetCap}).</span>
+            </div>
+          )}
 
           {/* Costo vs Precio */}
           <div className="grid grid-cols-2 gap-3">

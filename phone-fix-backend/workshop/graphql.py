@@ -100,6 +100,7 @@ class RepairOrderType:
     device: DeviceType
     issue_description: str
     technician_notes: Optional[str]
+    authorized_work: Optional[str]
     tech_observations: Optional[str]
     status: str
     status_display: str
@@ -151,6 +152,7 @@ class RepairOrderType:
             device=DeviceType.from_model(o.device),
             issue_description=o.issue_description,
             technician_notes=o.technician_notes,
+            authorized_work=o.authorized_work,
             tech_observations=o.tech_observations,
             status=o.status,
             status_display=o.get_status_display(),
@@ -208,6 +210,7 @@ class CreateRepairOrderInput:
     passcode: Optional[str] = None
     physical_condition: List[str] = strawberry.field(default_factory=list)
     issue_description: str = ""
+    authorized_work: Optional[str] = None
     estimated_total: float = 0.0
     deposit_cash: float = 0.0
     deposit_qr: float = 0.0
@@ -362,6 +365,7 @@ class WorkshopMutation:
                 client=client,
                 device=device,
                 issue_description=input.issue_description,
+                authorized_work=input.authorized_work or "",
                 estimated_total=Decimal(str(input.estimated_total)),
                 deposit_cash=deposit_cash,
                 deposit_qr=deposit_qr,
@@ -379,6 +383,7 @@ class WorkshopMutation:
         ticket_number: str,
         status: str,
         technician_notes: Optional[str] = None,
+        authorized_work: Optional[str] = None,
         tech_observations: Optional[str] = None
     ) -> Optional[RepairOrderType]:
         order = RepairOrder.objects.filter(ticket_number=ticket_number).first()
@@ -391,6 +396,8 @@ class WorkshopMutation:
         order.status = status
         if technician_notes is not None:
             order.technician_notes = technician_notes
+        if authorized_work is not None:
+            order.authorized_work = authorized_work
         if tech_observations is not None:
             order.tech_observations = tech_observations
         order.save()
@@ -514,6 +521,7 @@ class WorkshopMutation:
         ticket_number: str,
         estimated_total: float,
         technician_notes: Optional[str] = None,
+        authorized_work: Optional[str] = None,
         tech_observations: Optional[str] = None,
         delivery_promise_date: Optional[str] = None,
         status: Optional[str] = None
@@ -529,6 +537,8 @@ class WorkshopMutation:
         order.estimated_total = Decimal(str(estimated_total))
         if technician_notes is not None:
             order.technician_notes = technician_notes
+        if authorized_work is not None:
+            order.authorized_work = authorized_work
         if tech_observations is not None:
             order.tech_observations = tech_observations
         if delivery_promise_date is not None:

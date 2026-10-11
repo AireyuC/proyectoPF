@@ -16,7 +16,7 @@ import { formatMoney, createWhatsAppLink } from '../../../utils/format';
 import { RepairDetailModal } from '../components/RepairDetailModal';
 import { WorkshopTableView } from '../components/WorkshopTableView';
 
-type WorkshopPhase = 'DIAGNOSTICO' | 'REPARACION' | 'ENTREGADOS' | 'TODOS';
+type WorkshopPhase = 'DIAGNOSTICO' | 'REPARACION' | 'RETIRO' | 'ENTREGADOS' | 'TODOS';
 
 export const WorkshopPage: React.FC = () => {
   const [activePhase, setActivePhase] = useState<WorkshopPhase>('DIAGNOSTICO');
@@ -40,19 +40,22 @@ export const WorkshopPage: React.FC = () => {
   const counts = useMemo(() => {
     let diag = 0;
     let rep = 0;
+    let retiro = 0;
     let ent = 0;
 
     allOrders.forEach(o => {
       if (['RECIBIDO', 'DIAGNOSTICO', 'ESPERA_CLIENTE'].includes(o.status)) {
         diag++;
-      } else if (['EN_PROCESO', 'REPARADO_ESPERA', 'NO_REPARABLE_ESPERA', 'RECHAZADO_ESPERA'].includes(o.status)) {
+      } else if (o.status === 'EN_PROCESO') {
         rep++;
+      } else if (['REPARADO_ESPERA', 'NO_REPARABLE_ESPERA', 'RECHAZADO_ESPERA'].includes(o.status)) {
+        retiro++;
       } else if (['ENTREGADO_REPARADO', 'ENTREGADO_SIN_REPARAR', 'DECLARADO_ABANDONO'].includes(o.status)) {
         ent++;
       }
     });
 
-    return { diag, rep, ent, total: allOrders.length };
+    return { diag, rep, retiro, ent, total: allOrders.length };
   }, [allOrders]);
 
   // Filtrado reactivo por Fase y Subfiltro
@@ -62,7 +65,9 @@ export const WorkshopPage: React.FC = () => {
       if (activePhase === 'DIAGNOSTICO') {
         if (!['RECIBIDO', 'DIAGNOSTICO', 'ESPERA_CLIENTE'].includes(o.status)) return false;
       } else if (activePhase === 'REPARACION') {
-        if (!['EN_PROCESO', 'REPARADO_ESPERA', 'NO_REPARABLE_ESPERA', 'RECHAZADO_ESPERA'].includes(o.status)) return false;
+        if (o.status !== 'EN_PROCESO') return false;
+      } else if (activePhase === 'RETIRO') {
+        if (!['REPARADO_ESPERA', 'NO_REPARABLE_ESPERA', 'RECHAZADO_ESPERA'].includes(o.status)) return false;
       } else if (activePhase === 'ENTREGADOS') {
         if (!['ENTREGADO_REPARADO', 'ENTREGADO_SIN_REPARAR', 'DECLARADO_ABANDONO'].includes(o.status)) return false;
       }
@@ -160,56 +165,76 @@ export const WorkshopPage: React.FC = () => {
         </div>
       </div>
 
-      {/* PESTAÑAS DE FASES DEL TALLER */}
+      {/* PESTAÑAS DE FASES DEL TALLER (4 FASES OPERATIVAS) */}
       <div className="flex flex-wrap items-center gap-2 p-1.5 bg-[#0D121F] rounded-2xl border border-[#1E293B]">
+        {/* FASE 1: DIAGNÓSTICO */}
         <button
           onClick={() => { setActivePhase('DIAGNOSTICO'); setStatusSubFilter('ALL'); }}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer ${
             activePhase === 'DIAGNOSTICO'
               ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-lg shadow-amber-500/10'
               : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
           }`}
         >
           <Search size={14} />
-          <span>🔍 En Diagnóstico / Revisión</span>
+          <span>1. En Diagnóstico / Revisión</span>
           <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-500/30 text-amber-200 font-mono">
             {counts.diag}
           </span>
         </button>
 
+        {/* FASE 2: MESA DE TRABAJO */}
         <button
           onClick={() => { setActivePhase('REPARACION'); setStatusSubFilter('ALL'); }}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer ${
             activePhase === 'REPARACION'
-              ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-lg shadow-cyan-500/10'
+              ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 shadow-lg shadow-blue-500/10'
               : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
           }`}
         >
           <Wrench size={14} />
-          <span>🛠️ En Reparación / Mesa de Trabajo</span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] bg-cyan-500/30 text-cyan-200 font-mono">
+          <span>2. En Reparación / Mesa de Trabajo</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] bg-blue-500/30 text-blue-200 font-mono">
             {counts.rep}
           </span>
         </button>
 
+        {/* FASE 3: LISTOS PARA RETIRO (NUEVA PESTAÑA DEDICADA) */}
+        <button
+          onClick={() => { setActivePhase('RETIRO'); setStatusSubFilter('ALL'); }}
+          className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer ${
+            activePhase === 'RETIRO'
+              ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-lg shadow-cyan-500/10'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+          }`}
+        >
+          <CheckCircle2 size={14} />
+          <span>3. Listos para Retiro / Por Entregar</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] bg-cyan-500/30 text-cyan-200 font-mono">
+            {counts.retiro}
+          </span>
+        </button>
+
+        {/* FASE 4: ENTREGADOS & HISTORIAL */}
         <button
           onClick={() => { setActivePhase('ENTREGADOS'); setStatusSubFilter('ALL'); }}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer ${
             activePhase === 'ENTREGADOS'
               ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-lg shadow-emerald-500/10'
               : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
           }`}
         >
-          <CheckCircle2 size={14} />
-          <span>📦 Entregados & Historial</span>
+          <Smartphone size={14} />
+          <span>4. Entregados & Historial</span>
           <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/30 text-emerald-200 font-mono">
             {counts.ent}
           </span>
         </button>
 
+        {/* TODOS */}
         <button
           onClick={() => { setActivePhase('TODOS'); setStatusSubFilter('ALL'); }}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer ${
             activePhase === 'TODOS'
               ? 'bg-slate-700/50 text-white border border-slate-600'
               : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
@@ -257,17 +282,34 @@ export const WorkshopPage: React.FC = () => {
                 Recién Recibidos
               </button>
               <button
+                onClick={() => setStatusSubFilter('DIAGNOSTICO')}
+                className={`px-3 py-1.5 rounded-xl border text-[11px] transition cursor-pointer ${
+                  statusSubFilter === 'DIAGNOSTICO' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold' : 'bg-[#0D121F] text-slate-400 border-[#1E293B]'
+                }`}
+              >
+                En Diagnóstico
+              </button>
+              <button
                 onClick={() => setStatusSubFilter('ESPERA_CLIENTE')}
                 className={`px-3 py-1.5 rounded-xl border text-[11px] transition cursor-pointer ${
                   statusSubFilter === 'ESPERA_CLIENTE' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold' : 'bg-[#0D121F] text-slate-400 border-[#1E293B]'
                 }`}
               >
-                Espera Respuesta Cliente
+                Espera Autorización
               </button>
             </>
           )}
 
           {activePhase === 'REPARACION' && (
+            <button
+              onClick={() => setStatusSubFilter('ALL')}
+              className="px-3 py-1.5 rounded-xl border text-[11px] bg-blue-500/20 text-blue-300 border-blue-500/40 font-bold"
+            >
+              En Reparación Activa ({counts.rep})
+            </button>
+          )}
+
+          {activePhase === 'RETIRO' && (
             <>
               <button
                 onClick={() => setStatusSubFilter('ALL')}
@@ -275,15 +317,7 @@ export const WorkshopPage: React.FC = () => {
                   statusSubFilter === 'ALL' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 font-bold' : 'bg-[#0D121F] text-slate-400 border-[#1E293B]'
                 }`}
               >
-                Toda la Mesa
-              </button>
-              <button
-                onClick={() => setStatusSubFilter('EN_PROCESO')}
-                className={`px-3 py-1.5 rounded-xl border text-[11px] transition cursor-pointer ${
-                  statusSubFilter === 'EN_PROCESO' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 font-bold' : 'bg-[#0D121F] text-slate-400 border-[#1E293B]'
-                }`}
-              >
-                En Reparación Activa
+                Todos por Retirar ({counts.retiro})
               </button>
               <button
                 onClick={() => setStatusSubFilter('REPARADO_ESPERA')}
@@ -291,7 +325,60 @@ export const WorkshopPage: React.FC = () => {
                   statusSubFilter === 'REPARADO_ESPERA' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 font-bold' : 'bg-[#0D121F] text-slate-400 border-[#1E293B]'
                 }`}
               >
-                Reparado (Espera Retiro)
+                Reparados (Listos)
+              </button>
+              <button
+                onClick={() => setStatusSubFilter('NO_REPARABLE_ESPERA')}
+                className={`px-3 py-1.5 rounded-xl border text-[11px] transition cursor-pointer ${
+                  statusSubFilter === 'NO_REPARABLE_ESPERA' ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 font-bold' : 'bg-[#0D121F] text-slate-400 border-[#1E293B]'
+                }`}
+              >
+                Sin Solución
+              </button>
+              <button
+                onClick={() => setStatusSubFilter('RECHAZADO_ESPERA')}
+                className={`px-3 py-1.5 rounded-xl border text-[11px] transition cursor-pointer ${
+                  statusSubFilter === 'RECHAZADO_ESPERA' ? 'bg-orange-500/20 text-orange-300 border-orange-500/40 font-bold' : 'bg-[#0D121F] text-slate-400 border-[#1E293B]'
+                }`}
+              >
+                Cotiz. Rechazada
+              </button>
+            </>
+          )}
+
+          {activePhase === 'ENTREGADOS' && (
+            <>
+              <button
+                onClick={() => setStatusSubFilter('ALL')}
+                className={`px-3 py-1.5 rounded-xl border text-[11px] transition cursor-pointer ${
+                  statusSubFilter === 'ALL' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold' : 'bg-[#0D121F] text-slate-400 border-[#1E293B]'
+                }`}
+              >
+                Todos Historial
+              </button>
+              <button
+                onClick={() => setStatusSubFilter('ENTREGADO_REPARADO')}
+                className={`px-3 py-1.5 rounded-xl border text-[11px] transition cursor-pointer ${
+                  statusSubFilter === 'ENTREGADO_REPARADO' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold' : 'bg-[#0D121F] text-slate-400 border-[#1E293B]'
+                }`}
+              >
+                Entregados Reparados
+              </button>
+              <button
+                onClick={() => setStatusSubFilter('ENTREGADO_SIN_REPARAR')}
+                className={`px-3 py-1.5 rounded-xl border text-[11px] transition cursor-pointer ${
+                  statusSubFilter === 'ENTREGADO_SIN_REPARAR' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold' : 'bg-[#0D121F] text-slate-400 border-[#1E293B]'
+                }`}
+              >
+                Devueltos Sin Reparar
+              </button>
+              <button
+                onClick={() => setStatusSubFilter('DECLARADO_ABANDONO')}
+                className={`px-3 py-1.5 rounded-xl border text-[11px] transition cursor-pointer ${
+                  statusSubFilter === 'DECLARADO_ABANDONO' ? 'bg-red-500/20 text-red-300 border-red-500/40 font-bold' : 'bg-[#0D121F] text-slate-400 border-[#1E293B]'
+                }`}
+              >
+                Abandono
               </button>
             </>
           )}

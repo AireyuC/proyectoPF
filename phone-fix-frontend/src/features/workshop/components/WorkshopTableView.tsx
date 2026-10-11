@@ -87,11 +87,15 @@ export const WorkshopTableView: React.FC<WorkshopTableViewProps> = ({
                   <p className="text-slate-300 font-medium truncate" title={order.issueDescription}>
                     {order.issueDescription}
                   </p>
-                  {order.technicianNotes && (
+                  {order.authorizedWork ? (
+                    <p className="text-[10px] text-emerald-400/90 truncate font-semibold" title={order.authorizedWork}>
+                      Aut: {order.authorizedWork}
+                    </p>
+                  ) : order.technicianNotes ? (
                     <p className="text-[10px] text-cyan-400/80 truncate italic" title={order.technicianNotes}>
                       Diag: {order.technicianNotes}
                     </p>
-                  )}
+                  ) : null}
                 </td>
 
                 {/* Presupuesto Cotizado */}

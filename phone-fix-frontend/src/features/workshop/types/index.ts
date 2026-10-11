@@ -30,6 +30,7 @@ export interface RepairOrder {
     device: Device;
     issueDescription: string; // Lo que dice el cliente
     technicianNotes: string;  // Diagnóstico real
+    authorizedWork?: string;  // Trabajo autorizado por el cliente
     estimatedCost: number;
     status: RepairStatus;
     entryDate: Date;

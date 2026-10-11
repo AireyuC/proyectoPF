@@ -114,6 +114,7 @@ export const GET_REPAIR_ORDERS = gql`
       }
       issueDescription
       technicianNotes
+      authorizedWork
       techObservations
       status
       statusDisplay
@@ -175,6 +176,7 @@ export const GET_REPAIR_ORDER = gql`
       }
       issueDescription
       technicianNotes
+      authorizedWork
       techObservations
       status
       statusDisplay
@@ -239,12 +241,14 @@ export const UPDATE_REPAIR_STATUS = gql`
     $ticketNumber: String!
     $status: String!
     $technicianNotes: String
+    $authorizedWork: String
     $techObservations: String
   ) {
     updateRepairStatus(
       ticketNumber: $ticketNumber
       status: $status
       technicianNotes: $technicianNotes
+      authorizedWork: $authorizedWork
       techObservations: $techObservations
     ) {
       id
@@ -252,6 +256,7 @@ export const UPDATE_REPAIR_STATUS = gql`
       status
       statusDisplay
       technicianNotes
+      authorizedWork
       techObservations
     }
   }
@@ -380,6 +385,7 @@ export const UPDATE_REPAIR_QUOTE = gql`
     $ticketNumber: String!
     $estimatedTotal: Float!
     $technicianNotes: String
+    $authorizedWork: String
     $techObservations: String
     $deliveryPromiseDate: String
     $status: String
@@ -388,6 +394,7 @@ export const UPDATE_REPAIR_QUOTE = gql`
       ticketNumber: $ticketNumber
       estimatedTotal: $estimatedTotal
       technicianNotes: $technicianNotes
+      authorizedWork: $authorizedWork
       techObservations: $techObservations
       deliveryPromiseDate: $deliveryPromiseDate
       status: $status
@@ -399,6 +406,7 @@ export const UPDATE_REPAIR_QUOTE = gql`
       status
       statusDisplay
       technicianNotes
+      authorizedWork
       techObservations
       deliveryPromiseDate
     }

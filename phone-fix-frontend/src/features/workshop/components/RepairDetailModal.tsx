@@ -9,7 +9,10 @@ import {
   FileText, 
   Printer, 
   Check, 
-  DollarSign 
+  DollarSign,
+  AlertTriangle,
+  Lock,
+  Wrench
 } from 'lucide-react';
 import { Modal } from '../../../components/common/Modal';
 import { AddLineItemModal } from './AddLineItemModal';
@@ -37,15 +40,22 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
   order,
   onRefresh
 }) => {
+  // Determinación de la Fase del Ciclo de Vida
+  const isDiagnosticoPhase = ['RECIBIDO', 'DIAGNOSTICO', 'ESPERA_CLIENTE'].includes(order?.status);
+  const isReparacionPhase = order?.status === 'EN_PROCESO';
+  const isRetiroPhase = ['REPARADO_ESPERA', 'NO_REPARABLE_ESPERA', 'RECHAZADO_ESPERA'].includes(order?.status);
+  const isOrderClosed = ['ENTREGADO_REPARADO', 'ENTREGADO_SIN_REPARAR', 'DECLARADO_ABANDONO'].includes(order?.status);
+
+  // Tab activo contextual
   const [activeTab, setActiveTab] = useState<'GENERAL' | 'REPUESTOS' | 'ENTREGA'>('GENERAL');
   const [isAddPartOpen, setIsAddPartOpen] = useState(false);
 
-  // Estados de edición rápida y cotización
+  // Estados independientes de diagnóstico y cotización
   const [techNotes, setTechNotes] = useState(order?.technicianNotes || '');
+  const [authorizedWork, setAuthorizedWork] = useState(order?.authorizedWork || '');
   const [techObs, setTechObs] = useState(order?.techObservations || '');
   const [deliveryPromiseDate, setDeliveryPromiseDate] = useState(order?.deliveryPromiseDate || '');
   const [quoteAmount, setQuoteAmount] = useState<number | ''>(order?.estimatedTotal || 0);
-  const [quoteNotes, setQuoteNotes] = useState(order?.technicianNotes || '');
   
   // Estado de Liquidación / Entrega
   const [finalCash, setFinalCash] = useState<number | ''>(order?.remainingBalance || 0);
@@ -57,9 +67,6 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
   const [refundCash, setRefundCash] = useState<number | ''>(order?.depositCash || 0);
   const [refundReason, setRefundReason] = useState('');
 
-  // Inmutabilidad si ya fue entregada
-  const isOrderClosed = ['ENTREGADO_REPARADO', 'ENTREGADO_SIN_REPARAR', 'DECLARADO_ABANDONO'].includes(order?.status);
-
   // Mutaciones
   const [updateStatusMutation] = useMutation<any>(UPDATE_REPAIR_STATUS);
   const [deliverMutation] = useMutation<any>(DELIVER_REPAIR_ORDER);
@@ -68,19 +75,35 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
   const [updateQuoteMutation, { loading: updatingQuote }] = useMutation<any>(UPDATE_REPAIR_QUOTE);
   const [generateInvoiceMutation, { loading: generatingInvoice }] = useMutation<any>(GENERATE_REPAIR_INVOICE);
 
+  // Inicialización reactiva según orden y fase
   useEffect(() => {
     if (order) {
       setTechNotes(order.technicianNotes || '');
+      setAuthorizedWork(order.authorizedWork || '');
       setTechObs(order.techObservations || '');
       setDeliveryPromiseDate(order.deliveryPromiseDate || '');
       setQuoteAmount(order.estimatedTotal || 0);
-      setQuoteNotes(order.technicianNotes || '');
       setFinalCash(order.remainingBalance || 0);
       setRefundCash(order.depositCash || 0);
+
+      // Asignar tab predeterminado según la fase activa
+      if (['REPARADO_ESPERA', 'NO_REPARABLE_ESPERA', 'RECHAZADO_ESPERA', 'ENTREGADO_REPARADO', 'ENTREGADO_SIN_REPARAR', 'DECLARADO_ABANDONO'].includes(order.status)) {
+        setActiveTab('ENTREGA');
+      } else if (order.status === 'EN_PROCESO') {
+        setActiveTab('REPUESTOS');
+      } else {
+        setActiveTab('GENERAL');
+      }
     }
   }, [order]);
 
   if (!isOpen || !order) return null;
+
+  // Cálculos de Techo Presupuestario
+  const agreedBudget = Number(order.estimatedTotal || 0);
+  const totalPartsCost = (order.parts || []).reduce((acc: number, p: any) => acc + Number(p.cost || 0), 0);
+  const grossProfit = agreedBudget - totalPartsCost;
+  const isOverBudget = agreedBudget > 0 && totalPartsCost > agreedBudget;
 
   const handleStatusChange = async (newStatus: string) => {
     if (isOrderClosed) return;
@@ -89,6 +112,7 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
         ticketNumber: order.ticketNumber,
         status: newStatus,
         technicianNotes: techNotes,
+        authorizedWork: authorizedWork,
         techObservations: techObs
       }
     });
@@ -97,12 +121,15 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
 
   const handleSaveNotes = async () => {
     if (isOrderClosed) return;
-    await updateStatusMutation({
+    await updateQuoteMutation({
       variables: {
         ticketNumber: order.ticketNumber,
-        status: order.status,
+        estimatedTotal: Number(quoteAmount || 0),
         technicianNotes: techNotes,
-        techObservations: techObs
+        authorizedWork: authorizedWork,
+        techObservations: techObs,
+        deliveryPromiseDate: deliveryPromiseDate || null,
+        status: order.status
       }
     });
     onRefresh?.();
@@ -114,14 +141,15 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
       variables: {
         ticketNumber: order.ticketNumber,
         estimatedTotal: Number(quoteAmount || 0),
-        technicianNotes: quoteNotes,
+        technicianNotes: techNotes,
+        authorizedWork: authorizedWork,
         techObservations: techObs,
         deliveryPromiseDate: deliveryPromiseDate || null,
         status: newStatus || order.status
       }
     });
     onRefresh?.();
-    onClose(); // Cierra automáticamente al aplicar cotización
+    onClose(); // Cierra automáticamente al decidir estado
   };
 
   const handleGenerateInvoice = async () => {
@@ -182,9 +210,7 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
     >
       <div className="space-y-6">
         
-        {/* ======================================================== */}
-        {/* BANNER GIGANTE REACTIVO SI LLEVA >= 90 DÍAS EN TALLER */}
-        {/* ======================================================== */}
+        {/* BANNER DE ABANDONO SI LLEVA >= 90 DÍAS */}
         {order.isAbandonmentEligible && !order.isAbandoned && (
           <Can permission="taller.ordenes.declarar_abandono">
             <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-950/90 via-red-950/90 to-purple-950/90 border-2 border-purple-500 shadow-2xl shadow-purple-600/30 flex flex-col sm:flex-row items-center justify-between gap-4 animate-fade-in">
@@ -206,7 +232,7 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
               </div>
               <button
                 onClick={handleAbandon}
-                className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-purple-600 to-red-600 hover:from-purple-500 hover:to-red-500 text-white font-black text-xs tracking-wider uppercase rounded-xl shadow-xl shadow-purple-600/40 animate-pulse transition active:scale-95 shrink-0 cursor-pointer"
+                className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-purple-600 to-red-600 hover:from-purple-500 hover:to-red-500 text-white font-black text-xs tracking-wider uppercase rounded-xl shadow-xl shadow-purple-600/40 transition active:scale-95 shrink-0 cursor-pointer"
               >
                 Absorber como Activo
               </button>
@@ -218,13 +244,13 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
         {isOrderClosed && (
           <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-700/80 text-slate-300 text-xs flex items-center justify-between gap-3 shadow-lg">
             <div className="flex items-center gap-2.5">
-              <span className="text-xl">🔒</span>
+              <Lock size={18} className="text-amber-400 shrink-0" />
               <div>
                 <h4 className="font-bold text-white text-xs">
                   Orden Finalizada y Cerrada ({order.statusDisplay})
                 </h4>
                 <p className="text-[11px] text-slate-400">
-                  Esta orden se encuentra en modo estrictamente de SOLO LECTURA para garantizar la inmutabilidad contable y de auditoría.
+                  Esta orden se encuentra en modo estrictamente de SOLO LECTURA para garantizar la inmutabilidad contable y auditoría.
                 </p>
               </div>
             </div>
@@ -241,14 +267,14 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
           </div>
         )}
 
-        {/* Header Superior del Equipo y Cliente */}
+        {/* Header Superior del Equipo y Cliente con Estado Contextual */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-[#131926] border border-[#1E293B]">
           <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-xl bg-[#00E5FF]/10 text-[#00E5FF] flex items-center justify-center border border-[#00E5FF]/30 glow-cyan-subtle">
+            <div className="w-12 h-12 rounded-xl bg-[#00E5FF]/10 text-[#00E5FF] flex items-center justify-center border border-[#00E5FF]/30 glow-cyan-subtle shrink-0">
               <Smartphone size={24} />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-extrabold text-white text-base">
                   {order.device?.brand} {order.device?.model}
                 </h3>
@@ -261,7 +287,7 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                   </span>
                 )}
               </div>
-              <p className="text-xs text-[#94A3B8] flex items-center gap-2 mt-0.5">
+              <p className="text-xs text-[#94A3B8] flex items-center gap-2 mt-0.5 flex-wrap">
                 <span>Cliente: <strong className="text-white">{order.clientName}</strong></span>
                 <span>•</span>
                 <span>IMEI: {order.device?.imei || 'No registrado'}</span>
@@ -270,37 +296,45 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Botón Discreto de Abandono (Solo si NO es crítico >= 90d y no está cerrada) */}
-            {!isOrderClosed && !order.isAbandonmentEligible && !order.isAbandoned && (
-              <Can permission="taller.ordenes.declarar_abandono">
-                <button
-                  onClick={handleAbandon}
-                  className="px-2.5 py-1.5 border border-slate-700/80 hover:border-purple-500/50 text-slate-400 hover:text-purple-300 text-[10px] font-semibold rounded-xl transition cursor-pointer"
-                  title="Declarar abandono anticipado"
-                >
-                  Abandono
-                </button>
-              </Can>
+            {/* Estado Actual Distintivo */}
+            <div className="flex items-center gap-2">
+              {isDiagnosticoPhase && (
+                <span className="px-3 py-1.5 rounded-xl bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold text-xs flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                  {order.status === 'RECIBIDO' ? 'Recién Recibido' : order.status === 'ESPERA_CLIENTE' ? 'Espera Autorización' : 'En Diagnóstico'}
+                </span>
+              )}
+              {isReparacionPhase && (
+                <span className="px-3 py-1.5 rounded-xl bg-blue-500/15 text-blue-300 border border-blue-500/30 font-bold text-xs flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+                  En Reparación Activa
+                </span>
+              )}
+              {isRetiroPhase && (
+                <span className="px-3 py-1.5 rounded-xl bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-bold text-xs flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                  Listo para Retiro ({order.statusDisplay})
+                </span>
+              )}
+              {isOrderClosed && (
+                <span className="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 border border-slate-700 font-bold text-xs">
+                  {order.statusDisplay}
+                </span>
+              )}
+            </div>
+
+            {/* Transición Rápida si recién ingresó */}
+            {!isOrderClosed && order.status === 'RECIBIDO' && (
+              <button
+                onClick={() => handleStatusChange('DIAGNOSTICO')}
+                className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold transition cursor-pointer"
+                title="Poner en diagnóstico en laboratorio"
+              >
+                🔬 Iniciar Diagnóstico
+              </button>
             )}
 
-            <select
-              disabled={isOrderClosed}
-              value={order.status}
-              onChange={e => handleStatusChange(e.target.value)}
-              className="px-3 py-2 bg-[#0D121F] border border-[#00E5FF]/40 rounded-xl text-xs font-bold text-[#00E5FF] outline-none glow-cyan-subtle cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              <option value="RECIBIDO">Recibido en Recepción</option>
-              <option value="DIAGNOSTICO">En Diagnóstico</option>
-              <option value="ESPERA_CLIENTE">Esperando Autorización Cliente</option>
-              <option value="EN_PROCESO">En Reparación</option>
-              <option value="REPARADO_ESPERA">Reparado (En Espera de Retiro)</option>
-              <option value="NO_REPARABLE_ESPERA">Sin Solución (Espera Retiro)</option>
-              <option value="RECHAZADO_ESPERA">Presupuesto Rechazado (Espera Retiro)</option>
-              <option value="ENTREGADO_REPARADO">Entregado al Cliente (Reparado)</option>
-              <option value="ENTREGADO_SIN_REPARAR">Devuelto al Cliente (Sin Reparar)</option>
-              <option value="DECLARADO_ABANDONO">Declarado Abandono (&gt;3 Meses)</option>
-            </select>
-
+            {/* WhatsApp Directo */}
             <a
               href={createWhatsAppLink(order.clientPhone, `Hola ${order.clientName}, te escribimos de PhoneFix sobre tu ${order.device?.brand} ${order.device?.model} (Ticket #${order.ticketNumber}). Estado: ${order.statusDisplay}.`)}
               target="_blank"
@@ -313,18 +347,21 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
           </div>
         </div>
 
-        {/* Pestañas de Navegación del Modal */}
+        {/* PESTAÑAS DE NAVEGACIÓN CONTEXTUALES (FILTRADAS SEGÚN FASE) */}
         <div className="flex border-b border-[#1E293B] gap-6 text-xs font-bold">
+          {/* TAB 1: DIAGNÓSTICO & COTIZACIÓN */}
           <button
             onClick={() => setActiveTab('GENERAL')}
-            className={`pb-3 border-b-2 transition-all cursor-pointer ${
+            className={`pb-3 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'GENERAL'
                 ? 'border-[#00E5FF] text-[#00E5FF]'
                 : 'border-transparent text-[#94A3B8] hover:text-white'
             }`}
           >
-            Diagnóstico & Cotización
+            {isDiagnosticoPhase ? '1. Diagnóstico & Cotización' : 'Ficha de Diagnóstico'}
           </button>
+
+          {/* TAB 2: PIEZAS & GASTOS */}
           <button
             onClick={() => setActiveTab('REPUESTOS')}
             className={`pb-3 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -333,163 +370,226 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                 : 'border-transparent text-[#94A3B8] hover:text-white'
             }`}
           >
-            Piezas & Gastos ({order.parts?.length || 0})
+            <span>2. Piezas & Gastos ({order.parts?.length || 0})</span>
+            {isOverBudget && (
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" title="Presupuesto excedido" />
+            )}
           </button>
-          <button
-            onClick={() => setActiveTab('ENTREGA')}
-            className={`pb-3 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'ENTREGA'
-                ? 'border-[#00E5FF] text-[#00E5FF]'
-                : 'border-transparent text-[#94A3B8] hover:text-white'
-            }`}
-          >
-            Liquidación & Factura {order.invoicePdfUrl && <FileText size={12} className="text-cyan-400" />}
-          </button>
+
+          {/* TAB 3: LIQUIDACIÓN & FACTURA (OCULTA EN DIAGNÓSTICO Y REPARACIÓN) */}
+          {(isRetiroPhase || isOrderClosed) && (
+            <button
+              onClick={() => setActiveTab('ENTREGA')}
+              className={`pb-3 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'ENTREGA'
+                  ? 'border-[#00E5FF] text-[#00E5FF]'
+                  : 'border-transparent text-[#94A3B8] hover:text-white'
+              }`}
+            >
+              <span>3. Liquidación & Factura</span>
+              {order.invoicePdfUrl && <FileText size={12} className="text-cyan-400" />}
+            </button>
+          )}
         </div>
 
         {/* ======================================================== */}
-        {/* TAB 1: DIAGNÓSTICO Y COTIZACIÓN DIFERIDA */}
+        {/* TAB 1: DIAGNÓSTICO & COTIZACIÓN */}
         {/* ======================================================== */}
         {activeTab === 'GENERAL' && (
           <div className="space-y-4 text-xs">
+            {isDiagnosticoPhase ? (
+              /* MODO EDITABLE: EN DIAGNÓSTICO Y REVISIÓN */
+              <div className="space-y-4">
+                <div className={`p-4 rounded-xl border transition-all ${
+                  order.estimatedTotal === 0 || order.status === 'DIAGNOSTICO' || order.status === 'ESPERA_CLIENTE'
+                    ? 'bg-amber-500/10 border-amber-500/30'
+                    : 'bg-[#131926] border-cyan-500/30'
+                }`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`p-1.5 rounded-lg ${
+                        order.estimatedTotal === 0 ? 'bg-amber-500/20 text-amber-400' : 'bg-cyan-500/10 text-cyan-400'
+                      }`}>
+                        <DollarSign size={16} />
+                      </span>
+                      <div>
+                        <h4 className="font-bold text-white text-xs uppercase tracking-wide">
+                          Cotización y Compromiso de Entrega
+                        </h4>
+                        <p className="text-[11px] text-slate-300">
+                          {order.estimatedTotal === 0 
+                            ? '⚠️ El equipo ingresó con Bs. 0 (Pendiente de Diagnóstico o Consulta a Proveedor).' 
+                            : 'Fija el monto acordado y la fecha de entrega tras abrir el equipo en laboratorio.'}
+                        </p>
+                      </div>
+                    </div>
 
-            {/* PANEL DE COTIZACIÓN DINÁMICA (PERMITE FIJAR O CAMBIAR PRECIO Y FECHA ENTREGA) */}
-            <div className={`p-4 rounded-xl border transition-all ${
-              order.estimatedTotal === 0 || order.status === 'DIAGNOSTICO' || order.status === 'ESPERA_CLIENTE'
-                ? 'bg-amber-500/10 border-amber-500/30'
-                : 'bg-[#131926] border-cyan-500/30'
-            }`}>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className={`p-1.5 rounded-lg ${
-                    order.estimatedTotal === 0 ? 'bg-amber-500/20 text-amber-400' : 'bg-cyan-500/10 text-cyan-400'
-                  }`}>
-                    <DollarSign size={16} />
-                  </span>
-                  <div>
-                    <h4 className="font-bold text-white text-xs uppercase tracking-wide">
-                      Gestión de Presupuesto y Fecha de Entrega
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400">Presupuesto Registrado:</span>
+                      <span className="text-base font-black text-[#00E5FF]">
+                        {formatMoney(order.estimatedTotal)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3">
+                    {/* 1. Presupuesto Total */}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                        Presupuesto Total Acordado (Bs.) *
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          disabled={isOrderClosed}
+                          min="0"
+                          step="0.5"
+                          value={quoteAmount}
+                          onChange={e => setQuoteAmount(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                          placeholder="0.00"
+                          className="w-full px-3 py-2 bg-[#0D121F] border border-slate-700 focus:border-cyan-400 rounded-xl text-white font-bold text-sm outline-none"
+                        />
+                        <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">Bs.</span>
+                      </div>
+                    </div>
+
+                    {/* 2. Fecha Prometida */}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                        Fecha Prometida de Entrega
+                      </label>
+                      <input
+                        type="date"
+                        disabled={isOrderClosed}
+                        value={deliveryPromiseDate}
+                        onChange={e => setDeliveryPromiseDate(e.target.value)}
+                        className="w-full px-3 py-2 bg-[#0D121F] border border-slate-700 focus:border-cyan-400 rounded-xl text-white font-bold text-xs outline-none"
+                      />
+                    </div>
+
+                    {/* 3. Trabajo Autorizado */}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                        Trabajo Expresamente Autorizado
+                      </label>
+                      <input
+                        type="text"
+                        disabled={isOrderClosed}
+                        value={authorizedWork}
+                        onChange={e => setAuthorizedWork(e.target.value)}
+                        placeholder="Ej: Cambio de pantalla OLED + limpieza"
+                        className="w-full px-3 py-2 bg-[#0D121F] border border-slate-700 focus:border-cyan-400 rounded-xl text-white text-xs outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Acciones de Decisión y WhatsApp */}
+                  {!isOrderClosed && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-800">
+                      <a
+                        href={createWhatsAppLink(
+                          order.clientPhone, 
+                          `Hola ${order.clientName}, te escribimos de PhoneFix Montero. Ya revisamos tu equipo ${order.device?.brand} ${order.device?.model} (Ticket #${order.ticketNumber}). El presupuesto total es de Bs. ${quoteAmount || 0} por ${authorizedWork || techNotes || order.issueDescription}${deliveryPromiseDate ? ` con entrega estimada para el ${deliveryPromiseDate}` : ''}. Por favor confírmanos si autorizas realizar el trabajo.`
+                        )}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3.5 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 font-bold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
+                      >
+                        <MessageCircle size={14} />
+                        Enviar Cotización por WhatsApp
+                      </a>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={updatingQuote}
+                          onClick={() => handleUpdateQuote('RECHAZADO_ESPERA')}
+                          className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 font-bold rounded-xl text-xs transition cursor-pointer"
+                          title="Marcar como rechazado y pasar a Listos para Retiro"
+                        >
+                          ❌ Presupuesto Rechazado
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={updatingQuote}
+                          onClick={() => handleUpdateQuote('EN_PROCESO')}
+                          className="px-3.5 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-400 font-extrabold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer shadow-md"
+                          title="Cliente autorizó el presupuesto: pasa a En Reparación y cierra la ventana"
+                        >
+                          <Check size={14} />
+                          ✅ Cliente Autorizó Trabajo
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={updatingQuote}
+                          onClick={handleSaveNotes}
+                          className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs transition cursor-pointer"
+                        >
+                          {updatingQuote ? 'Guardando...' : '💾 Guardar Avance'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Diagnóstico Técnico de Laboratorio */}
+                <div className="p-4 rounded-xl bg-[#131926] border border-[#1E293B] space-y-2">
+                  <label className="text-[#94A3B8] font-bold uppercase tracking-wider text-[10px]">
+                    Diagnóstico Técnico / Hallazgos en Laboratorio
+                  </label>
+                  <textarea
+                    rows={3}
+                    disabled={isOrderClosed}
+                    value={techNotes}
+                    onChange={e => setTechNotes(e.target.value)}
+                    placeholder="Detalla qué fallas reales encontraste al desmontar el equipo en microscopio o multímetro..."
+                    className="w-full p-3 bg-[#0D121F] border border-[#1E293B] rounded-xl text-white outline-none focus:border-[#00E5FF] resize-none"
+                  />
+                </div>
+              </div>
+            ) : (
+              /* MODO SOLO LECTURA: CUANDO YA ESTÁ EN REPARACIÓN, RETIRO O CERRADO */
+              <div className="p-5 rounded-2xl bg-[#131926] border border-slate-700/80 space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <Lock size={16} className="text-cyan-400" />
+                    <h4 className="font-bold text-white text-xs uppercase tracking-wider">
+                      Ficha de Diagnóstico & Acuerdo (Solo Lectura)
                     </h4>
-                    <p className="text-[11px] text-slate-300">
-                      {order.estimatedTotal === 0 
-                        ? '⚠️ El equipo ingresó con Bs. 0 (Pendiente de Diagnóstico o Consulta a Proveedor).' 
-                        : 'Actualiza el monto cotizado y la fecha de entrega prometida tras abrir el equipo.'}
-                    </p>
                   </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400">Presupuesto Registrado:</span>
-                  <span className="text-base font-black text-[#00E5FF]">
-                    {formatMoney(order.estimatedTotal)}
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    Registrado en Fase de Revisión
                   </span>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3">
-                {/* 1. Presupuesto */}
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                    Presupuesto Cotizado Real (Bs.)
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      disabled={isOrderClosed}
-                      min="0"
-                      step="0.5"
-                      value={quoteAmount}
-                      onChange={e => setQuoteAmount(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                      placeholder="0.00"
-                      className="w-full px-3 py-2 bg-[#0D121F] border border-slate-700 focus:border-cyan-400 rounded-xl text-white font-bold text-sm outline-none disabled:opacity-50"
-                    />
-                    <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">Bs.</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-3 bg-[#0D121F] rounded-xl border border-slate-800 space-y-1">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">Diagnóstico de Laboratorio:</span>
+                    <p className="text-white text-xs whitespace-pre-wrap">{order.technicianNotes || 'Sin diagnóstico registrado'}</p>
+                  </div>
+                  <div className="p-3 bg-[#0D121F] rounded-xl border border-slate-800 space-y-1">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">Trabajo Autorizado por Cliente:</span>
+                    <p className="text-emerald-300 font-semibold text-xs">{order.authorizedWork || 'Trabajo estándar según diagnóstico'}</p>
                   </div>
                 </div>
 
-                {/* 2. Fecha Prometida de Entrega */}
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                    Fecha Prometida de Entrega
-                  </label>
-                  <input
-                    type="date"
-                    disabled={isOrderClosed}
-                    value={deliveryPromiseDate}
-                    onChange={e => setDeliveryPromiseDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0D121F] border border-slate-700 focus:border-cyan-400 rounded-xl text-white font-bold text-xs outline-none disabled:opacity-50"
-                  />
-                </div>
-
-                {/* 3. Trabajo Cotizado */}
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                    Trabajo Autorizado por Cliente
-                  </label>
-                  <input
-                    type="text"
-                    disabled={isOrderClosed}
-                    value={quoteNotes}
-                    onChange={e => setQuoteNotes(e.target.value)}
-                    placeholder="Ej: Cambio de pantalla OLED + limpieza"
-                    className="w-full px-3 py-2 bg-[#0D121F] border border-slate-700 focus:border-cyan-400 rounded-xl text-white text-xs outline-none disabled:opacity-50"
-                  />
-                </div>
-              </div>
-
-              {/* Botones de Decisión y WhatsApp */}
-              {!isOrderClosed && (
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-800">
-                  <a
-                    href={createWhatsAppLink(
-                      order.clientPhone, 
-                      `Hola ${order.clientName}, te escribimos de PhoneFix Montero. Ya revisamos tu equipo ${order.device?.brand} ${order.device?.model} (Ticket #${order.ticketNumber}). El presupuesto de reparación es de Bs. ${quoteAmount || 0} por ${quoteNotes || order.issueDescription}${deliveryPromiseDate ? ` con entrega estimada para el ${deliveryPromiseDate}` : ''}. Por favor indícanos si autorizas realizar el trabajo.`
-                    )}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="px-3.5 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 font-bold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
-                  >
-                    <MessageCircle size={14} />
-                    Enviar Cotización por WhatsApp
-                  </a>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={updatingQuote}
-                      onClick={() => handleUpdateQuote('RECHAZADO_ESPERA')}
-                      className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 font-bold rounded-xl text-xs transition cursor-pointer"
-                      title="Marcar como rechazado y cerrar"
-                    >
-                      ❌ Rechazó Presupuesto
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={updatingQuote}
-                      onClick={() => handleUpdateQuote('EN_PROCESO')}
-                      className="px-3.5 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-400 font-extrabold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer shadow-md"
-                      title="Actualizar monto y pasar a En Reparación (Cierra ventana)"
-                    >
-                      <Check size={14} />
-                      ✅ Cliente Autorizó Trabajo
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={updatingQuote}
-                      onClick={() => handleUpdateQuote()}
-                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs transition cursor-pointer"
-                    >
-                      {updatingQuote ? 'Guardando...' : '💾 Guardar Cotización'}
-                    </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400">Presupuesto Aprobado:</span>
+                    <span className="text-sm font-bold text-cyan-400 font-mono">{formatMoney(order.estimatedTotal)}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400">Promesa de Entrega:</span>
+                    <span className="text-xs font-bold text-white font-mono">{order.deliveryPromiseDate || 'No fijada'}</span>
                   </div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
+            {/* Falla Declarada y Clave / Patrón */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Falla declarada */}
               <div className="p-4 rounded-xl bg-[#131926] border border-[#1E293B] space-y-2">
                 <p className="text-[#94A3B8] font-bold uppercase tracking-wider text-[10px]">
                   Falla Declarada en Recepción
@@ -506,7 +606,6 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                 </div>
               </div>
 
-              {/* Clave de desbloqueo / Patrón */}
               <div className="p-4 rounded-xl bg-[#131926] border border-[#1E293B] space-y-2">
                 <p className="text-[#94A3B8] font-bold uppercase tracking-wider text-[10px]">
                   Código o Patrón de Seguridad
@@ -517,22 +616,7 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
               </div>
             </div>
 
-            {/* Diagnóstico técnico */}
-            <div className="p-4 rounded-xl bg-[#131926] border border-[#1E293B] space-y-2">
-              <label className="text-[#94A3B8] font-bold uppercase tracking-wider text-[10px]">
-                Diagnóstico Técnico / Defectos Detectados en Laboratorio
-              </label>
-              <textarea
-                rows={3}
-                disabled={isOrderClosed}
-                value={techNotes}
-                onChange={e => setTechNotes(e.target.value)}
-                placeholder="Detalle de fallas encontradas al desmontar el equipo, componentes dañados, sugerencias..."
-                className="w-full p-3 bg-[#0D121F] border border-[#1E293B] rounded-xl text-white outline-none focus:border-[#00E5FF] resize-none disabled:opacity-50"
-              />
-            </div>
-
-            {/* ESPACIO EXCLUSIVO DE OBSERVACIONES INTERNAS PARA EL PERSONAL */}
+            {/* Observaciones Internas del Personal */}
             <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/30 space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-amber-400 font-bold uppercase tracking-wider text-[10px] flex items-center gap-2">
@@ -547,7 +631,7 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                 disabled={isOrderClosed}
                 value={techObs}
                 onChange={e => setTechObs(e.target.value)}
-                placeholder="Anotaciones privadas del personal: placa delicada, cliente conflictivo, pruebas internas, etc..."
+                placeholder="Anotaciones privadas del personal: placa delicada, cliente conflictivo, pruebas internas..."
                 className="w-full p-3 bg-[#0D121F] border border-amber-500/20 rounded-xl text-amber-100 placeholder-slate-500 text-xs outline-none focus:border-amber-400 resize-none disabled:opacity-50"
               />
               {!isOrderClosed && (
@@ -557,7 +641,7 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                     onClick={handleSaveNotes}
                     className="px-4 py-2 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 rounded-xl font-bold transition-all cursor-pointer"
                   >
-                    💾 Guardar Notas & Observaciones
+                    💾 Guardar Notas Internas
                   </button>
                 </div>
               )}
@@ -567,11 +651,43 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
         )}
 
         {/* ======================================================== */}
-        {/* TAB 2: REPUESTOS Y GASTOS IMPUTADOS */}
+        {/* TAB 2: PIEZAS & GASTOS IMPUTADOS (CON TECHO PRESUPUESTARIO) */}
         {/* ======================================================== */}
         {activeTab === 'REPUESTOS' && (
           <div className="space-y-4 text-xs">
-            <div className="flex items-center justify-between">
+            
+            {/* AUDÍMETRO DE CONTROL PRESUPUESTARIO */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-2xl bg-[#131926] border border-[#1E293B]">
+              <div className="p-3 rounded-xl bg-[#0D121F] border border-slate-800">
+                <span className="text-[#94A3B8] block text-[11px] font-semibold">Presupuesto Aprobado Cliente:</span>
+                <span className="text-lg font-black text-white font-mono">{formatMoney(agreedBudget)}</span>
+              </div>
+              <div className="p-3 rounded-xl bg-[#0D121F] border border-slate-800">
+                <span className="text-[#94A3B8] block text-[11px] font-semibold">Gasto en Repuestos (Caja Chica):</span>
+                <span className={`text-lg font-black font-mono ${isOverBudget ? 'text-red-400' : 'text-amber-400'}`}>
+                  {formatMoney(totalPartsCost)}
+                </span>
+              </div>
+              <div className="p-3 rounded-xl bg-[#0D121F] border border-slate-800">
+                <span className="text-[#94A3B8] block text-[11px] font-semibold">Margen / Ganancia Taller:</span>
+                <span className={`text-lg font-black font-mono ${grossProfit < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                  {formatMoney(grossProfit)}
+                </span>
+              </div>
+            </div>
+
+            {/* ALERTA VISUAL DE TECHO PRESUPUESTARIO EXCEDIDO */}
+            {isOverBudget && (
+              <div className="p-3.5 bg-red-500/15 border border-red-500/40 rounded-xl text-red-200 text-xs flex items-center gap-2.5 font-bold shadow-lg shadow-red-500/10">
+                <AlertTriangle size={18} className="shrink-0 text-red-400" />
+                <span>
+                  ⚠️ ATENCIÓN: El costo de los repuestos ({formatMoney(totalPartsCost)}) supera el presupuesto acordado con el cliente ({formatMoney(agreedBudget)}). Se requiere autorización expresa del cliente antes de incurrir en más compras de repuestos.
+                </span>
+              </div>
+            )}
+
+            {/* Listado de Repuestos */}
+            <div className="flex items-center justify-between pt-2">
               <h4 className="font-bold text-white uppercase tracking-wider text-[11px]">
                 Desglose de Piezas y Mano de Obra Imputadas
               </h4>
@@ -579,10 +695,10 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsAddPartOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#00E5FF] text-[#080B11] font-bold rounded-xl shadow-md hover:brightness-110 transition-all cursor-pointer text-xs"
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-[#00E5FF] text-[#080B11] font-bold rounded-xl shadow-md hover:brightness-110 transition-all cursor-pointer text-xs"
                 >
                   <Plus size={14} />
-                  Agregar Pieza o Gasto
+                  Imputar Pieza o Gasto
                 </button>
               )}
             </div>
@@ -594,7 +710,7 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                     <th className="p-3">Pieza / Servicio</th>
                     <th className="p-3">Origen</th>
                     <th className="p-3">Costo (Caja Chica)</th>
-                    <th className="p-3">Cobrado a Cliente</th>
+                    <th className="p-3">Precio Cliente</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#1E293B]">
@@ -620,21 +736,37 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
               </table>
             </div>
 
-            {/* Resumen Financiero del Servicio */}
-            <div className="p-4 rounded-xl bg-[#131926] border border-[#1E293B] flex flex-wrap justify-between gap-4 text-xs">
-              <div>
-                <span className="text-[#94A3B8] block">Total Cotizado / Acordado:</span>
-                <span className="font-extrabold text-white text-base">{formatMoney(order.estimatedTotal)}</span>
+            {/* BOTÓN DE TRANSICIÓN RÁPIDA DESDE MESA DE TRABAJO */}
+            {isReparacionPhase && (
+              <div className="p-4 rounded-2xl bg-[#131926] border border-blue-500/30 flex flex-wrap items-center justify-between gap-3 mt-4">
+                <div>
+                  <h4 className="font-bold text-white text-xs flex items-center gap-2">
+                    <Wrench size={14} className="text-blue-400" /> Conclusión de Mesa de Trabajo
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    Al terminar de reparar o comprobar falla irreparable, envía la orden a la sección de Listos para Retiro.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateQuote('NO_REPARABLE_ESPERA')}
+                    className="px-3.5 py-2 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 font-bold rounded-xl transition cursor-pointer"
+                  >
+                    ⚠️ Sin Solución Técnica
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateQuote('REPARADO_ESPERA')}
+                    className="px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 font-extrabold rounded-xl transition cursor-pointer shadow-lg shadow-cyan-500/20 flex items-center gap-1.5"
+                  >
+                    <CheckCircle size={15} />
+                    ✅ Marcar Reparado (Listo para Retiro)
+                  </button>
+                </div>
               </div>
-              <div>
-                <span className="text-[#94A3B8] block">Salida de Caja Chica (Costo Repuestos):</span>
-                <span className="font-extrabold text-red-400 text-base">{formatMoney(order.costCashOut)}</span>
-              </div>
-              <div>
-                <span className="text-[#94A3B8] block">Ganancia Neta Estimada:</span>
-                <span className="font-extrabold text-[#10B981] text-base">{formatMoney(order.profit)}</span>
-              </div>
-            </div>
+            )}
+
           </div>
         )}
 
@@ -656,7 +788,7 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                       Comprobante de Servicio y Garantía (MinIO S3)
                     </h4>
                     <p className="text-[11px] text-slate-400">
-                      Documento PDF con logo oficial PhoneFix, afiliación ASOTTECMO, desglose financiero bicanal y póliza de garantía de 3 semanas.
+                      Documento PDF con logo oficial PhoneFix, afiliación ASOTTECMO y póliza de garantía de 3 semanas.
                     </p>
                   </div>
                 </div>
@@ -700,18 +832,18 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
             {/* Cuadro de Saldos */}
             <div className="p-4 rounded-xl bg-[#0D121F] border border-[#1E293B] flex flex-wrap justify-between items-center gap-4">
               <div>
-                <span className="text-[#94A3B8] block text-[11px]">Total Cotizado:</span>
+                <span className="text-[#94A3B8] block text-[11px]">Total Cotizado / Acordado:</span>
                 <span className="font-extrabold text-white text-lg">{formatMoney(order.estimatedTotal)}</span>
               </div>
               <div>
-                <span className="text-[#94A3B8] block text-[11px]">Seña Ya Cobrada:</span>
+                <span className="text-[#94A3B8] block text-[11px]">Seña Pagada al Ingresar:</span>
                 <span className="font-extrabold text-[#10B981] text-lg">
                   {formatMoney(order.depositCash + order.depositQr)}
                 </span>
               </div>
               <div>
                 <span className="text-[#94A3B8] block text-[11px]">Saldo Pendiente de Cobro:</span>
-                <span className="font-extrabold text-[#00E5FF] text-xl">
+                <span className="font-extrabold text-[#00E5FF] text-xl font-mono">
                   {formatMoney(order.remainingBalance)}
                 </span>
               </div>
@@ -779,10 +911,10 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                   <button
                     type="button"
                     onClick={() => handleDeliver(true)}
-                    className="w-full py-3 bg-gradient-to-r from-[#10B981] to-[#059669] text-white font-extrabold rounded-xl shadow-lg shadow-[#10B981]/20 flex items-center justify-center gap-2 cursor-pointer transition-all hover:brightness-110"
+                    className="w-full py-3 bg-gradient-to-r from-[#10B981] to-[#059669] text-white font-extrabold rounded-xl shadow-lg shadow-[#10B981]/20 flex items-center justify-center gap-2 cursor-pointer transition-all hover:brightness-110 active:scale-95"
                   >
                     <CheckCircle size={16} />
-                    Entregar Reparado & Finalizar Ticket
+                    Entregar Reparado & Finalizar Orden
                   </button>
                 </div>
 
@@ -794,7 +926,7 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                   </div>
 
                   <p className="text-[#94A3B8] text-[11px]">
-                    Si el equipo no tiene arreglo o el cliente rechazó la cotización, se devuelve el dispositivo sin garantía. Si dejó seña, se registra la devolución correspondiente.
+                    Si el equipo no tiene arreglo o el cliente rechazó la cotización, se devuelve el dispositivo sin garantía. Si dejó seña al entrar, registra el reintegro.
                   </p>
 
                   <div className="space-y-1.5">
@@ -820,7 +952,7 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                       type="text"
                       value={refundReason}
                       onChange={e => setRefundReason(e.target.value)}
-                      placeholder="Ej. Placa en corto, repuesto no disponible..."
+                      placeholder="Ej. Placa en corto sin repuesto, cliente rechazó..."
                       className="w-full px-3 py-2 bg-[#0D121F] border border-[#1E293B] rounded-xl text-white outline-none focus:border-red-400"
                     />
                   </div>
@@ -828,10 +960,10 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                   <button
                     type="button"
                     onClick={handleRefund}
-                    className="w-full py-3 bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 font-bold rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all"
+                    className="w-full py-3 bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 font-bold rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
                   >
                     <XCircle size={16} />
-                    Devolver Sin Reparar & Devolver Seña
+                    Devolver Dispositivo & Reintegrar Seña
                   </button>
                 </div>
 
@@ -855,6 +987,8 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
         isOpen={isAddPartOpen}
         onClose={() => setIsAddPartOpen(false)}
         ticketNumber={order.ticketNumber}
+        budgetCap={agreedBudget}
+        currentCost={totalPartsCost}
         onSuccess={onRefresh}
       />
     </Modal>

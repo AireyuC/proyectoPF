@@ -239,8 +239,8 @@ def generate_repair_invoice_pdf(order) -> tuple[str, str]:
         ]
     ]
 
-    # Trabajo de mano de obra
-    tech_work = order.technician_notes or "Servicio de diagnóstico, mantenimiento y reparación"
+    # Trabajo de mano de obra y servicio
+    tech_work = order.authorized_work or order.technician_notes or "Servicio de diagnóstico, mantenimiento y reparación"
     parts_data.append([
         Paragraph(f"<b>Mano de Obra y Servicio Técnico:</b> {tech_work}", val_style),
         Paragraph("Servicio Técnico Especializado", val_style),
