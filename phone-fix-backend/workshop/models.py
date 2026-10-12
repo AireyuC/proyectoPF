@@ -90,6 +90,7 @@ class RepairOrder(models.Model):
     deposit_cash = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Seña en Efectivo (Bs.)")
     deposit_qr = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Seña por QR (Bs.)")
     deposit_refunded = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Seña Devuelta si falló (Bs.)")
+    deposit_refund_method = models.CharField(max_length=10, choices=[('EFECTIVO', 'Efectivo'), ('QR', 'QR / Banco')], default='EFECTIVO', verbose_name="Canal de Devolución de Seña")
     deposit_date = models.DateTimeField(blank=True, null=True, verbose_name="Fecha del Pago de Seña")
 
     # Saldo Final (Al retirar)
@@ -181,6 +182,7 @@ class RepairPartItem(models.Model):
     cost = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Costo Caja Chica (Bs.)")
     price = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Precio Cobrado al Cliente (Bs.)")
     supplier = models.ForeignKey(Supplier, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Proveedor Externo")
+    payment_method = models.CharField(max_length=10, choices=[('EFECTIVO', 'Efectivo (Caja Chica)'), ('QR', 'Transferencia / QR')], default='EFECTIVO', verbose_name="Canal de Egreso / Pago")
     is_paid = models.BooleanField(default=False, verbose_name="¿Ya se pagó al proveedor?")
 
     class Meta:

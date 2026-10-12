@@ -74,6 +74,7 @@ class RepairPartItemType:
     cost: float
     price: float
     is_paid: bool
+    payment_method: str = "EFECTIVO"
     supplier_name: Optional[str]
     product_name: Optional[str]
 
@@ -86,6 +87,7 @@ class RepairPartItemType:
             cost=float(p.cost),
             price=float(p.price),
             is_paid=p.is_paid,
+            payment_method=getattr(p, 'payment_method', 'EFECTIVO') or 'EFECTIVO',
             supplier_name=p.supplier.name if p.supplier else None,
             product_name=p.product.name if p.product else None
         )
@@ -114,6 +116,7 @@ class RepairOrderType:
     deposit_cash: float
     deposit_qr: float
     deposit_refunded: float
+    deposit_refund_method: str = "EFECTIVO"
     deposit_date: Optional[str]
     final_payment_cash: float
     final_payment_qr: float
@@ -165,6 +168,7 @@ class RepairOrderType:
             deposit_cash=float(o.deposit_cash),
             deposit_qr=float(o.deposit_qr),
             deposit_refunded=float(o.deposit_refunded),
+            deposit_refund_method=getattr(o, 'deposit_refund_method', 'EFECTIVO') or 'EFECTIVO',
             deposit_date=o.deposit_date.isoformat() if o.deposit_date else None,
             final_payment_cash=float(o.final_payment_cash),
             final_payment_qr=float(o.final_payment_qr),
@@ -227,6 +231,7 @@ class AddRepairPartInput:
     price: float = 0.0
     supplier_id: Optional[int] = None
     is_paid: bool = False
+    payment_method: str = "EFECTIVO"
 
 @strawberry.type
 class WorkshopQuery:
@@ -421,6 +426,7 @@ class WorkshopMutation:
                 cost=Decimal(str(input.cost)),
                 price=Decimal(str(input.price)),
                 supplier=supplier,
+                payment_method=input.payment_method or "EFECTIVO",
                 is_paid=input.is_paid
             )
 
@@ -474,6 +480,7 @@ class WorkshopMutation:
         self,
         ticket_number: str,
         refund_cash: float,
+        refund_method: Optional[str] = "EFECTIVO",
         reason: Optional[str] = None
     ) -> Optional[RepairOrderType]:
         order = RepairOrder.objects.filter(ticket_number=ticket_number).first()
@@ -481,10 +488,14 @@ class WorkshopMutation:
             return None
 
         order.deposit_refunded = Decimal(str(refund_cash))
+        order.deposit_refund_method = refund_method or "EFECTIVO"
         order.status = RepairOrder.Status.ENTREGADO_SIN_REPARAR
         order.delivered_at = timezone.now()
+        method_label = "QR / Banco" if order.deposit_refund_method == "QR" else "Efectivo"
         if reason:
-            order.tech_observations = f"Devolución seña: {reason}"
+            order.tech_observations = f"Devolución seña ({method_label}): {reason}"
+        else:
+            order.tech_observations = f"Devolución seña ({method_label})"
         order.profit = order.calculate_profit()
         order.save()
         return RepairOrderType.from_model(order)

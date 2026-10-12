@@ -27,6 +27,7 @@ export const AddLineItemModal: React.FC<AddLineItemModalProps> = ({
   const [cost, setCost] = useState<number | ''>(0);
   const [price, setPrice] = useState<number | ''>(0);
   const [supplierId, setSupplierId] = useState<number | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'EFECTIVO' | 'QR'>('EFECTIVO');
   const [isPaid, setIsPaid] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
@@ -44,6 +45,7 @@ export const AddLineItemModal: React.FC<AddLineItemModalProps> = ({
       setPrice(0);
       setSelectedProductId(null);
       setSupplierId(null);
+      setPaymentMethod('EFECTIVO');
       setIsPaid(false);
       setErrorMsg('');
     },
@@ -86,6 +88,7 @@ export const AddLineItemModal: React.FC<AddLineItemModalProps> = ({
           cost: Number(cost || 0),
           price: Number(price || 0),
           supplierId: sourceType === 'EXTERNAL' ? supplierId : null,
+          paymentMethod: sourceType === 'EXTERNAL' ? paymentMethod : 'EFECTIVO',
           isPaid
         }
       }
@@ -186,6 +189,37 @@ export const AddLineItemModal: React.FC<AddLineItemModalProps> = ({
                   </option>
                 ))}
               </select>
+
+              {/* Selector de Canal de Egreso */}
+              <div className="space-y-1 pt-1">
+                <label className="text-[#94A3B8] font-semibold text-[11px] block">
+                  Canal de Egreso / Pago a Caseta:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('EFECTIVO')}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                      paymentMethod === 'EFECTIVO'
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm'
+                        : 'bg-[#131926] text-slate-400 border-slate-800 hover:text-white'
+                    }`}
+                  >
+                    💵 Efectivo (Caja Chica)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('QR')}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                      paymentMethod === 'QR'
+                        ? 'bg-blue-500/20 text-blue-300 border-blue-500/40 shadow-sm'
+                        : 'bg-[#131926] text-slate-400 border-slate-800 hover:text-white'
+                    }`}
+                  >
+                    📱 QR / Banco Empresa
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 

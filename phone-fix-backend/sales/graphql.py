@@ -41,6 +41,7 @@ class LedgerEntryType:
     cash_in: float
     qr_in: float
     cash_out: float
+    qr_out: float = 0.0
     net_amount: float
     user_or_tech: str
     notes: Optional[str] = None
@@ -50,7 +51,11 @@ class LedgerSummaryType:
     total_cash_in: float
     total_qr_in: float
     total_cash_out: float
+    total_qr_out: float
     total_revenue: float
+    total_expenses: float
+    net_cash: float
+    net_qr: float
     net_profit: float
     total_entries_count: int
 
@@ -275,6 +280,7 @@ class SalesQuery:
                 cash_in=c_in,
                 qr_in=q_in,
                 cash_out=0.0,
+                qr_out=0.0,
                 net_amount=c_in + q_in,
                 user_or_tech=s.user.username if s.user else "Cajero",
                 notes=f"{s.items.count()} producto(s)"
@@ -301,6 +307,7 @@ class SalesQuery:
                 cash_in=c_in,
                 qr_in=q_in,
                 cash_out=0.0,
+                qr_out=0.0,
                 net_amount=c_in + q_in,
                 user_or_tech="Recepción",
                 notes=r.issue_description
@@ -326,6 +333,7 @@ class SalesQuery:
                 cash_in=c_in,
                 qr_in=q_in,
                 cash_out=0.0,
+                qr_out=0.0,
                 net_amount=c_in + q_in,
                 user_or_tech="Taller / Entrega",
                 notes=r.technician_notes or "Entrega final de equipo reparado"
@@ -341,6 +349,9 @@ class SalesQuery:
 
         for p in parts_qs:
             c_out = float(p.cost)
+            is_qr = (getattr(p, 'payment_method', 'EFECTIVO') == 'QR')
+            cash_out_val = 0.0 if is_qr else c_out
+            qr_out_val = c_out if is_qr else 0.0
             entries.append(LedgerEntryType(
                 id=f"REP-PART-{p.id}",
                 timestamp=p.repair_order.created_at.isoformat(),
@@ -349,10 +360,11 @@ class SalesQuery:
                 reference_code=p.repair_order.ticket_number,
                 cash_in=0.0,
                 qr_in=0.0,
-                cash_out=c_out,
+                cash_out=cash_out_val,
+                qr_out=qr_out_val,
                 net_amount=-c_out,
                 user_or_tech=p.supplier.name if p.supplier else "Caseta Externa",
-                notes=f"Proveedor: {p.supplier.name if p.supplier else 'Caseta local'} - Pagado: {'Sí' if p.is_paid else 'Pendiente'}"
+                notes=f"Proveedor: {p.supplier.name if p.supplier else 'Caseta local'} - Pago: {'QR / Banco' if is_qr else 'Efectivo (Caja Chica)'}"
             ))
 
         # 5. Devoluciones de Señas
@@ -364,6 +376,9 @@ class SalesQuery:
 
         for r in refunds_qs:
             c_out = float(r.deposit_refunded)
+            is_qr = (getattr(r, 'deposit_refund_method', 'EFECTIVO') == 'QR')
+            cash_out_val = 0.0 if is_qr else c_out
+            qr_out_val = c_out if is_qr else 0.0
             entries.append(LedgerEntryType(
                 id=f"REP-REF-{r.ticket_number}",
                 timestamp=r.delivered_at.isoformat(),
@@ -372,10 +387,11 @@ class SalesQuery:
                 reference_code=r.ticket_number,
                 cash_in=0.0,
                 qr_in=0.0,
-                cash_out=c_out,
+                cash_out=cash_out_val,
+                qr_out=qr_out_val,
                 net_amount=-c_out,
                 user_or_tech="Caja / Recepción",
-                notes=r.tech_observations or "Devolución por no aceptación o falta de repuesto"
+                notes=f"Devolución vía {'QR / Banco' if is_qr else 'Efectivo'}: {r.tech_observations or 'Devolución de seña'}"
             ))
 
         # Ordenar por timestamp descendente
@@ -384,14 +400,22 @@ class SalesQuery:
         tot_cash_in = sum(e.cash_in for e in entries)
         tot_qr_in = sum(e.qr_in for e in entries)
         tot_cash_out = sum(e.cash_out for e in entries)
+        tot_qr_out = sum(e.qr_out for e in entries)
         tot_revenue = tot_cash_in + tot_qr_in
-        net_prof = tot_revenue - tot_cash_out
+        tot_expenses = tot_cash_out + tot_qr_out
+        net_prof = tot_revenue - tot_expenses
+        net_c = tot_cash_in - tot_cash_out
+        net_q = tot_qr_in - tot_qr_out
 
         summary = LedgerSummaryType(
             total_cash_in=tot_cash_in,
             total_qr_in=tot_qr_in,
             total_cash_out=tot_cash_out,
+            total_qr_out=tot_qr_out,
             total_revenue=tot_revenue,
+            total_expenses=tot_expenses,
+            net_cash=net_c,
+            net_qr=net_q,
             net_profit=net_prof,
             total_entries_count=len(entries)
         )

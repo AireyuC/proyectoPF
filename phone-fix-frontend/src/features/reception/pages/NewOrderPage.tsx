@@ -77,10 +77,26 @@ export const NewOrderPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState('');
 
   // Queries & Mutations
-  const { refetch: refetchClients } = useQuery<any>(GET_CLIENTS, { variables: { search: '' } });
+  const { data: clientsData, refetch: refetchClients } = useQuery<any>(GET_CLIENTS, { variables: { search: '' } });
   const { data: presetsData } = useQuery<any>(GET_DEVICE_BRAND_PRESETS);
   const [createClientMutation] = useMutation<any>(CREATE_CLIENT);
   const [createOrderMutation, { loading: creatingOrder }] = useMutation<any>(CREATE_REPAIR_ORDER);
+
+  // Detección automática de cliente recurrente en base a CI o Celular
+  const matchedClient = React.useMemo(() => {
+    if (!clientsData?.clients) return null;
+    const cleanCi = clientCi.trim().toLowerCase();
+    const cleanPhone = clientPhone.trim();
+    if (cleanCi && cleanCi.length >= 4) {
+      const found = clientsData.clients.find((c: any) => c.ci && c.ci.trim().toLowerCase() === cleanCi);
+      if (found) return found;
+    }
+    if (cleanPhone && cleanPhone.length >= 7) {
+      const found = clientsData.clients.find((c: any) => c.phonePrimary && c.phonePrimary.trim() === cleanPhone);
+      if (found) return found;
+    }
+    return null;
+  }, [clientCi, clientPhone, clientsData]);
 
   const brandPresets = presetsData?.deviceBrandPresets || DEFAULT_PRESETS;
   const currentBrandPreset = brandPresets.find(
@@ -231,6 +247,37 @@ export const NewOrderPage: React.FC = () => {
           </div>
 
           <div className="space-y-4 text-xs">
+            {/* Banner de Cliente Recurrente Detectado */}
+            {matchedClient && (
+              <div className="p-3.5 rounded-xl bg-gradient-to-r from-emerald-950/40 to-[#0D121F] border border-emerald-500/40 text-emerald-300 flex items-center justify-between gap-3 shadow-lg">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-extrabold text-white text-xs">{matchedClient.fullName}</span>
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      {matchedClient.isRecurrent ? '⭐ Cliente Recurrente' : 'Cliente Registrado'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-emerald-400/80 font-mono">
+                    CI: {matchedClient.ci || 'Sin CI'} • {matchedClient.repairsCount || 0} {(matchedClient.repairsCount === 1) ? 'orden previa' : 'órdenes previas'} en PhoneFix
+                  </p>
+                </div>
+                {(!clientName || clientName !== matchedClient.fullName) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setClientName(matchedClient.fullName);
+                      if (matchedClient.phonePrimary) setClientPhone(matchedClient.phonePrimary);
+                      if (matchedClient.phoneReference) setClientRefPhone(matchedClient.phoneReference);
+                      if (matchedClient.ci) setClientCi(matchedClient.ci);
+                    }}
+                    className="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-[11px] rounded-lg transition active:scale-95 cursor-pointer whitespace-nowrap shadow-md"
+                  >
+                    Cargar Datos
+                  </button>
+                )}
+              </div>
+            )}
+
             <div>
               <label className="block text-[#94A3B8] font-semibold mb-1.5">
                 Nombre Completo *

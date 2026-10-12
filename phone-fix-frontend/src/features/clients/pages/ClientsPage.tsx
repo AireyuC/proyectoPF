@@ -132,31 +132,60 @@ export const ClientsPage: React.FC = () => {
                   {c.fullName.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <h4 className="font-bold text-white text-sm flex items-center gap-1.5">
+                  <h4 className="font-bold text-white text-sm flex items-center gap-1.5 flex-wrap">
                     {c.fullName}
                     {c.isVip && (
                       <span className="p-0.5 rounded bg-[#F59E0B]/20 text-[#F59E0B]" title="Cliente VIP">
                         <Star size={12} fill="#F59E0B" />
                       </span>
                     )}
+                    {c.isRecurrent && (
+                      <span className="px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1" title="Cliente recurrente en el taller">
+                        <RefreshCw size={9} /> Recurrente
+                      </span>
+                    )}
                   </h4>
-                  <p className="text-[11px] text-[#94A3B8]">CI: {c.ci || 'Sin registrar'}</p>
+                  <p className="text-[11px] text-[#94A3B8]">CI: <strong className="text-white font-mono">{c.ci || 'Sin registrar'}</strong></p>
                 </div>
               </div>
 
-              <a
-                href={createWhatsAppLink(c.phonePrimary, `Hola ${c.fullName}, te saludamos de PhoneFix.`)}
-                target="_blank"
-                rel="noreferrer"
-                className="p-2 rounded-xl bg-[#10B981]/15 text-[#10B981] hover:bg-[#10B981]/25 transition-colors cursor-pointer"
-                title="Mensaje WhatsApp"
-              >
-                <MessageCircle size={16} />
-              </a>
+              <div className="flex items-center gap-1.5">
+                <a
+                  href={createWhatsAppLink(c.phonePrimary, `Hola ${c.fullName}, te saludamos de PhoneFix.`)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-2 rounded-xl bg-[#10B981]/15 text-[#10B981] hover:bg-[#10B981]/25 transition-colors cursor-pointer"
+                  title="Mensaje WhatsApp"
+                >
+                  <MessageCircle size={16} />
+                </a>
+              </div>
+            </div>
+
+            {/* Badges de Actividad y Contador */}
+            <div className="flex items-center justify-between text-xs pt-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className={`px-2 py-0.5 rounded-lg text-[11px] font-bold font-mono border flex items-center gap-1 ${
+                  c.repairsCount > 0 
+                    ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30' 
+                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                }`}>
+                  <RefreshCw size={11} className={c.repairsCount > 1 ? 'text-cyan-400' : 'text-slate-400'} />
+                  <span>{c.repairsCount || 0} {(c.repairsCount === 1) ? 'orden' : 'órdenes'}</span>
+                </span>
+                {c.isRecurrent && (
+                  <span className="px-2 py-0.5 rounded-lg text-[10px] font-extrabold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                    ⭐ Frecuente
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] text-slate-500">
+                {c.createdAt ? new Date(c.createdAt).toLocaleDateString('es-BO') : ''}
+              </span>
             </div>
 
             <div className="pt-2 border-t border-[#1E293B] flex items-center justify-between text-xs text-[#94A3B8]">
-              <span className="flex items-center gap-1">
+              <span className="flex items-center gap-1 font-mono">
                 <Phone size={12} className="text-[#00E5FF]" /> {c.phonePrimary}
               </span>
               {c.phoneReference && (

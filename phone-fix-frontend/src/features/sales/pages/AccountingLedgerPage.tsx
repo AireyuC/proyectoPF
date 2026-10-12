@@ -39,7 +39,11 @@ export const AccountingLedgerPage: React.FC = () => {
     totalCashIn: 0,
     totalQrIn: 0,
     totalCashOut: 0,
+    totalQrOut: 0,
     totalRevenue: 0,
+    totalExpenses: 0,
+    netCash: 0,
+    netQr: 0,
     netProfit: 0,
     totalEntriesCount: 0
   };
@@ -74,7 +78,8 @@ export const AccountingLedgerPage: React.FC = () => {
       'Referencia / Ticket',
       'Ingreso Efectivo (Bs.)',
       'Ingreso QR (Bs.)',
-      'Egreso Caja Chica (Bs.)',
+      'Egreso Efectivo (Bs.)',
+      'Egreso QR / Banco (Bs.)',
       'Monto Neto (Bs.)',
       'Responsable / Origen',
       'Notas / Auditoría'
@@ -97,6 +102,7 @@ export const AccountingLedgerPage: React.FC = () => {
         e.cashIn.toFixed(2),
         e.qrIn.toFixed(2),
         e.cashOut.toFixed(2),
+        (e.qrOut || 0).toFixed(2),
         e.netAmount.toFixed(2),
         `"${(e.userOrTech || '').replace(/"/g, '""')}"`,
         `"${(e.notes || '').replace(/"/g, '""')}"`
@@ -111,7 +117,11 @@ export const AccountingLedgerPage: React.FC = () => {
       `"Ingreso Efectivo Total (Bs.): ${summary.totalCashIn.toFixed(2)}"`,
       `"Ingreso QR Total (Bs.): ${summary.totalQrIn.toFixed(2)}"`,
       `"Ingresos Totales (Bs.): ${summary.totalRevenue.toFixed(2)}"`,
-      `"Egresos Totales (Bs.): ${summary.totalCashOut.toFixed(2)}"`,
+      `"Egreso Efectivo Total (Bs.): ${summary.totalCashOut.toFixed(2)}"`,
+      `"Egreso QR Total (Bs.): ${(summary.totalQrOut || 0).toFixed(2)}"`,
+      `"Total Egresos (Bs.): ${(summary.totalExpenses || (summary.totalCashOut + (summary.totalQrOut || 0))).toFixed(2)}"`,
+      `"Saldo Líquido Gaveta (Bs.): ${(summary.netCash || (summary.totalCashIn - summary.totalCashOut)).toFixed(2)}"`,
+      `"Saldo Líquido Banco QR (Bs.): ${(summary.netQr || (summary.totalQrIn - (summary.totalQrOut || 0))).toFixed(2)}"`,
       `"Rendimiento Neto (Bs.): ${summary.netProfit.toFixed(2)}"`,
       ''
     ].join('\n');
@@ -289,55 +299,67 @@ export const AccountingLedgerPage: React.FC = () => {
 
       </div>
 
-      {/* KPI Cards Financieras */}
+      {/* KPI Cards Financieras Bicanal */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
         
         {/* Total Ingresos */}
         <div className="p-4 rounded-2xl bg-[#0D121F] border border-cyan-500/30 space-y-1">
           <div className="flex items-center justify-between text-slate-400 text-[11px] font-semibold">
-            <span>Ingresos Totales</span>
+            <span>Ingresos Totales (Bruto)</span>
             <DollarSign size={15} className="text-cyan-400" />
           </div>
           <p className="text-xl font-black text-white font-mono">
             {formatMoney(summary.totalRevenue)}
           </p>
-          <span className="text-[10px] text-cyan-400/80">Efectivo + QR</span>
+          <div className="text-[10px] text-slate-400 flex items-center justify-between">
+            <span className="text-emerald-400 font-mono">💵 Ef: {summary.totalCashIn.toFixed(0)}</span>
+            <span className="text-blue-400 font-mono">📱 QR: {summary.totalQrIn.toFixed(0)}</span>
+          </div>
         </div>
 
-        {/* Ingresos en Efectivo */}
+        {/* Efectivo en Gaveta */}
         <div className="p-4 rounded-2xl bg-[#0D121F] border border-emerald-500/20 space-y-1">
           <div className="flex items-center justify-between text-slate-400 text-[11px] font-semibold">
-            <span>Efectivo Ingresado</span>
+            <span>Saldo Físico Gaveta</span>
             <ArrowDownLeft size={15} className="text-emerald-400" />
           </div>
           <p className="text-xl font-black text-emerald-400 font-mono">
-            {formatMoney(summary.totalCashIn)}
+            {formatMoney(summary.netCash || (summary.totalCashIn - summary.totalCashOut))}
           </p>
-          <span className="text-[10px] text-slate-400">En gaveta de caja</span>
+          <div className="text-[10px] text-slate-400 flex items-center justify-between font-mono">
+            <span className="text-emerald-400">+{summary.totalCashIn.toFixed(0)} in</span>
+            <span className="text-rose-400">-{summary.totalCashOut.toFixed(0)} out</span>
+          </div>
         </div>
 
-        {/* Ingresos QR */}
+        {/* Banco / QR */}
         <div className="p-4 rounded-2xl bg-[#0D121F] border border-blue-500/20 space-y-1">
           <div className="flex items-center justify-between text-slate-400 text-[11px] font-semibold">
-            <span>QR / Bancos</span>
+            <span>Saldo Banco / QR</span>
             <QrCode size={15} className="text-blue-400" />
           </div>
           <p className="text-xl font-black text-blue-400 font-mono">
-            {formatMoney(summary.totalQrIn)}
+            {formatMoney(summary.netQr || (summary.totalQrIn - (summary.totalQrOut || 0)))}
           </p>
-          <span className="text-[10px] text-slate-400">Banco Unión / BCP / BNB</span>
+          <div className="text-[10px] text-slate-400 flex items-center justify-between font-mono">
+            <span className="text-blue-400">+{summary.totalQrIn.toFixed(0)} in</span>
+            <span className="text-purple-400">-{(summary.totalQrOut || 0).toFixed(0)} out</span>
+          </div>
         </div>
 
-        {/* Egresos / Compras Caseta */}
+        {/* Egresos Totales */}
         <div className="p-4 rounded-2xl bg-[#0D121F] border border-rose-500/20 space-y-1">
           <div className="flex items-center justify-between text-slate-400 text-[11px] font-semibold">
-            <span>Salidas Caja Chica</span>
+            <span>Egresos Totales</span>
             <ArrowUpRight size={15} className="text-rose-400" />
           </div>
           <p className="text-xl font-black text-rose-400 font-mono">
-            {formatMoney(summary.totalCashOut)}
+            {formatMoney(summary.totalExpenses || (summary.totalCashOut + (summary.totalQrOut || 0)))}
           </p>
-          <span className="text-[10px] text-slate-400">Repuestos casetas + devoluciones</span>
+          <div className="text-[10px] text-slate-400 flex items-center justify-between font-mono">
+            <span className="text-rose-400">💵 Ef: {summary.totalCashOut.toFixed(0)}</span>
+            <span className="text-purple-400">📱 QR: {(summary.totalQrOut || 0).toFixed(0)}</span>
+          </div>
         </div>
 
         {/* Rendimiento Neto */}
@@ -349,7 +371,7 @@ export const AccountingLedgerPage: React.FC = () => {
           <p className="text-xl font-black text-cyan-300 font-mono">
             {formatMoney(summary.netProfit)}
           </p>
-          <span className="text-[10px] text-cyan-200/80">{summary.totalEntriesCount} movimientos</span>
+          <span className="text-[10px] text-cyan-200/80">{summary.totalEntriesCount} movimientos auditados</span>
         </div>
 
       </div>
@@ -384,10 +406,11 @@ export const AccountingLedgerPage: React.FC = () => {
                   <th className="py-3 px-3.5">Operación</th>
                   <th className="py-3 px-3.5">Concepto</th>
                   <th className="py-3 px-3.5">Referencia</th>
-                  <th className="py-3 px-3.5 text-right">Efectivo (Bs.)</th>
-                  <th className="py-3 px-3.5 text-right">QR (Bs.)</th>
-                  <th className="py-3 px-3.5 text-right">Egreso (Bs.)</th>
-                  <th className="py-3 px-3.5 text-right">Neto (Bs.)</th>
+                  <th className="py-3 px-3.5 text-right text-emerald-400">Efec. In (+)</th>
+                  <th className="py-3 px-3.5 text-right text-blue-400">QR In (+)</th>
+                  <th className="py-3 px-3.5 text-right text-rose-400">Egreso Ef. (-)</th>
+                  <th className="py-3 px-3.5 text-right text-purple-400">Egreso QR (-)</th>
+                  <th className="py-3 px-3.5 text-right text-white">Neto (Bs.)</th>
                   <th className="py-3 px-3.5">Responsable</th>
                   <th className="py-3 px-3.5">Notas Auditoría</th>
                 </tr>
@@ -436,10 +459,19 @@ export const AccountingLedgerPage: React.FC = () => {
                       )}
                     </td>
 
-                    {/* Egreso Out */}
+                    {/* Egreso Efectivo */}
                     <td className="py-3 px-3.5 text-right font-mono">
                       {e.cashOut > 0 ? (
                         <span className="text-rose-400 font-bold">-{e.cashOut.toFixed(2)}</span>
+                      ) : (
+                        <span className="text-slate-600">-</span>
+                      )}
+                    </td>
+
+                    {/* Egreso QR */}
+                    <td className="py-3 px-3.5 text-right font-mono">
+                      {e.qrOut > 0 ? (
+                        <span className="text-purple-400 font-bold">-{e.qrOut.toFixed(2)}</span>
                       ) : (
                         <span className="text-slate-600">-</span>
                       )}

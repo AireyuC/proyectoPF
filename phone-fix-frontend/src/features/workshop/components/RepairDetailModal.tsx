@@ -65,6 +65,7 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
   
   // Estado de Devolución de seña
   const [refundCash, setRefundCash] = useState<number | ''>(order?.depositCash || 0);
+  const [refundMethod, setRefundMethod] = useState<'EFECTIVO' | 'QR'>('EFECTIVO');
   const [refundReason, setRefundReason] = useState('');
 
   // Mutaciones
@@ -84,7 +85,13 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
       setDeliveryPromiseDate(order.deliveryPromiseDate || '');
       setQuoteAmount(order.estimatedTotal || 0);
       setFinalCash(order.remainingBalance || 0);
-      setRefundCash(order.depositCash || 0);
+      const totalPaidDeposit = (order.depositCash || 0) + (order.depositQr || 0);
+      setRefundCash(totalPaidDeposit > 0 ? totalPaidDeposit : (order.depositCash || 0));
+      if (order.depositQr > 0 && order.depositCash === 0) {
+        setRefundMethod('QR');
+      } else {
+        setRefundMethod('EFECTIVO');
+      }
 
       // Asignar tab predeterminado según la fase activa
       if (['REPARADO_ESPERA', 'NO_REPARABLE_ESPERA', 'RECHAZADO_ESPERA', 'ENTREGADO_REPARADO', 'ENTREGADO_SIN_REPARAR', 'DECLARADO_ABANDONO'].includes(order.status)) {
@@ -181,6 +188,7 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
       variables: {
         ticketNumber: order.ticketNumber,
         refundCash: Number(refundCash || 0),
+        refundMethod: refundMethod,
         reason: refundReason
       }
     });
@@ -929,9 +937,40 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                     Si el equipo no tiene arreglo o el cliente rechazó la cotización, se devuelve el dispositivo sin garantía. Si dejó seña al entrar, registra el reintegro.
                   </p>
 
+                  {/* Selector de Canal de Devolución */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[#94A3B8] font-semibold text-xs">
+                      Canal de Devolución de Seña:
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setRefundMethod('EFECTIVO')}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                          refundMethod === 'EFECTIVO'
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm'
+                            : 'bg-[#0D121F] text-slate-400 border-slate-850 hover:text-white'
+                        }`}
+                      >
+                        💵 En Efectivo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRefundMethod('QR')}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                          refundMethod === 'QR'
+                            ? 'bg-blue-500/20 text-blue-300 border-blue-500/40 shadow-sm'
+                            : 'bg-[#0D121F] text-slate-400 border-slate-850 hover:text-white'
+                        }`}
+                      >
+                        📱 Por QR / Transferencia
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="space-y-1.5">
                     <label className="block text-[#94A3B8] font-semibold">
-                      Devolución de Seña en Efectivo (Bs.)
+                      Monto a Reintegrar (Bs.)
                     </label>
                     <input
                       type="number"
@@ -939,7 +978,7 @@ export const RepairDetailModal: React.FC<RepairDetailModalProps> = ({
                       step="0.5"
                       value={refundCash}
                       onChange={e => setRefundCash(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                      className="w-full px-3 py-2 bg-[#0D121F] border border-[#1E293B] rounded-xl text-white outline-none focus:border-red-400"
+                      className="w-full px-3 py-2 bg-[#0D121F] border border-[#1E293B] rounded-xl text-white outline-none focus:border-red-400 font-mono font-bold"
                       placeholder="0.00"
                     />
                   </div>

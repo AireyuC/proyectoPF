@@ -29,6 +29,8 @@ export const GET_CLIENTS = gql`
       isVip
       notes
       createdAt
+      repairsCount
+      isRecurrent
     }
   }
 `;
@@ -43,6 +45,8 @@ export const CREATE_CLIENT = gql`
       phoneReference
       email
       isVip
+      repairsCount
+      isRecurrent
     }
   }
 `;
@@ -270,6 +274,7 @@ export const ADD_REPAIR_PART = gql`
       sourceType
       cost
       price
+      paymentMethod
       supplierName
     }
   }
@@ -307,12 +312,13 @@ export const DELIVER_REPAIR_ORDER = gql`
 `;
 
 export const REFUND_REPAIR_DEPOSIT = gql`
-  mutation RefundRepairDeposit($ticketNumber: String!, $refundCash: Float!, $reason: String) {
-    refundRepairDeposit(ticketNumber: $ticketNumber, refundCash: $refundCash, reason: $reason) {
+  mutation RefundRepairDeposit($ticketNumber: String!, $refundCash: Float!, $refundMethod: String, $reason: String) {
+    refundRepairDeposit(ticketNumber: $ticketNumber, refundCash: $refundCash, refundMethod: $refundMethod, reason: $reason) {
       id
       ticketNumber
       status
       depositRefunded
+      depositRefundMethod
       totalCollected
     }
   }
@@ -438,7 +444,11 @@ export const GET_ACCOUNTING_LEDGER = gql`
         totalCashIn
         totalQrIn
         totalCashOut
+        totalQrOut
         totalRevenue
+        totalExpenses
+        netCash
+        netQr
         netProfit
         totalEntriesCount
       }
@@ -451,6 +461,7 @@ export const GET_ACCOUNTING_LEDGER = gql`
         cashIn
         qrIn
         cashOut
+        qrOut
         netAmount
         userOrTech
         notes
