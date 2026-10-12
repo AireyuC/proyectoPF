@@ -80,27 +80,22 @@ Punto de entrada técnico y legal del dispositivo:
 
 ---
 
-### B. Gestión de Taller: Separación de Técnica, Custodia y Política de Abandono
+### B. Gestión de Taller en 4 Fases Operativas y Control de Presupuesto
 
-La orden maneja dos dimensiones paralelas: **Resultado Técnico** y **Custodia Física del Dispositivo**.
+El flujo de trabajo técnico y de custodia se organiza formalmente en **4 fases operativas**:
 
 ```mermaid
-stateDiagram-v2
-    state "1. Dimensión Técnica" as Tecnica {
-        [*] --> DIAGNOSTICO: Ingreso a mesa
-        DIAGNOSTICO --> EN_PROCESO: Autorizado
-        EN_PROCESO --> REPARADO_EXITO: Reparación concluida
-        EN_PROCESO --> NO_REPARABLE: Sin repuesto / Daño irreversible
-        DIAGNOSTICO --> RECHAZADO: Cliente no aceptó presupuesto
-    }
-
-    state "2. Dimensión de Custodia" as Custodia {
-        EN_TALLER --> LISTO_EN_ESPERA: Trabajo terminado o suspendido
-        LISTO_EN_ESPERA --> RETIRADO_ENTREGADO: Cliente retira y liquida
-        LISTO_EN_ESPERA --> DEVUELTO_SIN_ARREGLO: Cliente retira sin arreglar
-        LISTO_EN_ESPERA --> DECLARADO_ABANDONO: > 3 Meses (Acción Exclusiva ADMIN)
-        DECLARADO_ABANDONO --> A_LA_VENTA: Pasa a inventario de activos del taller
-    }
+graph TD
+    A["1. Recepción de Equipo (C.I., Seña Opcional, Presupuesto Inicial o Bs. 0)"] --> B["FASE 1: En Diagnóstico / Revisión"]
+    B -->|"Técnico revisa y cotiza vía WhatsApp"| C{"Respuesta Cliente"}
+    C -->|"Cliente Acepta"| D["FASE 2: En Reparación / Mesa de Trabajo"]
+    C -->|"Cliente Rechaza"| E["FASE 3: Listos para Retiro / Por Entregar (Rechazado)"]
+    D -->|"Reparado con Éxito"| F["FASE 3: Listos para Retiro / Por Entregar (Reparado)"]
+    D -->|"Sin Solución"| G["FASE 3: Listos para Retiro / Por Entregar (No Reparable)"]
+    F -->|"Cobro final, emisión Factura MinIO y entrega"| H["FASE 4: Entregados & Historial (INMUTABLE)"]
+    E -->|"Devolución de equipo y seña si aplica"| H
+    G -->|"Devolución de equipo y seña si aplica"| H
+    F -->|"> 90 días en taller"| I["Declaración de Abandono (Activo para Venta)"]
 ```
 
 #### Reglas de Negocio en Taller:
@@ -111,18 +106,23 @@ stateDiagram-v2
    * **Cómputo temporal:** Corre estrictamente a partir de la **Fecha de Retiro / Entrega en mano del cliente**.
    * **Excepciones de Administración:** El Administrador puede modificarla a `SIN GARANTIA` (para placas mojadas/térmicas), `3 MESES` (pantallas OLED/originales) o días personalizados.
 
-2. **Política de Abandono (> 3 Meses) y Absorción como Activo:**
+2. **Control de Presupuesto y Techo Presupuestario (Budget Cap):**
+   * El presupuesto acordado (`estimated_total`) es el monto tope aprobado por el cliente.
+   * Cada repuesto cargado tiene su costo real (`cost`) y precio al cliente (`price`).
+   * La interfaz previene que los gastos excedan el presupuesto acordado con alertas visuales de auditoría.
+
+3. **Política de Abandono (> 3 Meses) y Absorción como Activo:**
    * Si un equipo permanece en custodia del taller por **más de 90 días (3 meses)** sin ser retirado por el cliente:
      * El sistema muestra una alerta destacada: *"Equipo con plazo vencido (> 90 días)"*.
      * **Autorización Estricta:** Se requiere que el **Administrador** autorice y cambie el estado a `DECLARADO_ABANDONO`.
      * **Conversión en Activo Comercial:** Una vez cambiado el estado, el teléfono pasa a ser legal y contablemente parte de los **activos del taller**.
-     * **Venta Libre:** El mismo Administrador tiene la potestad de publicarlo a la venta en el POS o tienda **a cualquier precio que decida** (como teléfono usado reacondicionado o para desarme de repuestos).
+     * **Venta Libre:** El mismo Administrador tiene la potestad de publicarlo a la venta en el POS o tienda **a cualquier precio que decida**.
 
-3. **Cálculo de Ganancia Neta y Caja Chica:**
-   * Costo real pagado en Caja Chica por el repuesto.
-   $$\text{Ganancia Neta} = \text{Total Cobrado} - \text{Caja Chica}$$
+4. **Discriminación del Canal de Egreso en Compras a Casetas:**
+   * Al comprar un repuesto externo a caseta, se registra si se pagó en **Efectivo (Caja Chica)** o por **QR / Transferencia Bancaria**. Esto garantiza que la gaveta física no sufra descuadres si la compra se pagó desde la cuenta bancaria.
 
-4. **Observaciones Técnicas:** Campo libre para registrar anotaciones críticas (*"Con transplante de EPROM"*, *"Precio bajo acordado"*).
+5. **Clientes Recurrentes por C.I.:**
+   * El sistema detecta clientes frecuentes mediante su número de C.I., calculando el contador correlativo de visitas (`repairs_count`) y otorgando la distinción de cliente recurrente para fidelización.
 
 ---
 

@@ -96,15 +96,70 @@ Se prohíbe el selector libre desordenado de 10 estados. En su lugar, el estado 
 
 ---
 
-## 5. Módulo de Libro Contable Inmutable
+## 5. Módulo de Libro Contable Inmutable y Conciliación Bicanal
+*(Estado: **COMPLETADO**)*
 
 * **Ruta:** `/contabilidad`
-* **Acceso:** Exclusivo Administrador y usuarios con permiso contable.
-* **Naturaleza:** 100% Inmutable (Solo lectura).
-* **Consolidación:**
+* **Acceso:** Exclusivo Administrador y usuarios con permiso contable (`caja.movimientos.ver`).
+* **Naturaleza:** 100% Inmutable (Solo lectura forense).
+* **Consolidación Integral:**
   * Ventas Mostrador (Efectivo y QR).
   * Señas de Taller (Efectivo y QR).
   * Saldos de Entrega de Taller (Efectivo y QR).
-  * Salidas de Caja Chica (Compras de repuestos a casetas).
-  * Devoluciones de Señas por equipos no reparados.
-* **Exportación:** Botón directo a archivo `.csv` compatible con Excel en Bolivia (con UTF-8 BOM).
+  * Egresos de Caja Chica (Compras de repuestos pagadas en efectivo).
+  * Egresos Bancarios / QR (Compras de repuestos pagadas por transferencia bancaria / QR).
+  * Devoluciones de Señas (clasificadas en efectivo o por QR según el canal utilizado).
+* **Tarjetas KPI Bicanal:**
+  * **Ingresos Brutos Totales:** Suma de todas las entradas en efectivo y QR.
+  * **Saldo Físico Gaveta:** Conciliación estricta de billetes en caja ($\sum \text{Efectivo In} - \sum \text{Egreso Efectivo}$).
+  * **Saldo Banco / QR:** Conciliación de cuenta bancaria ($\sum \text{QR In} - \sum \text{Egreso QR}$).
+  * **Egresos Totales:** Desglose visible de gastos en efectivo vs. transferencias QR.
+  * **Rendimiento Neto:** Ganancia operativa líquida real ($\text{Ingresos} - \text{Egresos}$).
+* **Exportación CSV:** Compatible nativamente con Microsoft Excel para Windows (UTF-8 con BOM y delimitador `;`).
+* **Manual de Usuario:** Documentado íntegramente en [11_GUIA_USUARIO_LIBRO_CONTABLE.md](./11_GUIA_USUARIO_LIBRO_CONTABLE.md).
+
+---
+
+## 6. Detección de Clientes Recurrentes por C.I. y Contador de Visitas
+*(Estado: **COMPLETADO**)*
+
+Para evitar la duplicidad de clientes y premiar la fidelización:
+
+1. **Unicidad en Base de Datos & GraphQL ([`clients/graphql.py`](file:///d:/proyectoPF/phone-fix-backend/clients/graphql.py)):**
+   * En la mutación `create_client`, antes de insertar un nuevo registro, se comprueba si el `ci` ya existe (o el celular principal `phone_primary`).
+   * Si existe, se actualizan datos faltantes y se asocia la nueva orden de reparación a su `id` existente.
+   * Se exponen en `ClientType`:
+     * `repairs_count: int`: Total histórico de órdenes asociadas al cliente.
+     * `is_recurrent: bool`: `True` cuando `repairs_count >= 2`.
+
+2. **Detección Reactiva en Recepción ([`NewOrderPage.tsx`](file:///d:/proyectoPF/phone-fix-frontend/src/features/reception/pages/NewOrderPage.tsx)):**
+   * Al ingresar el C.I. o teléfono del cliente en el formulario de recepción, el sistema detecta de inmediato al cliente existente y despliega un banner informativo:
+     > ⚡ **Cliente Detectado:** [Nombre] • [X] órdenes previas en PhoneFix • [ ⭐ Cliente Recurrente ] `[ Cargar Datos ]`
+   * Al hacer clic en `[ Cargar Datos ]`, se completan automáticamente el nombre, teléfono y referencia familiar.
+
+3. **Tarjeta de Cliente con Contador ([`ClientsPage.tsx`](file:///d:/proyectoPF/phone-fix-frontend/src/features/clients/pages/ClientsPage.tsx)):**
+   * Cada tarjeta en el directorio de clientes incluye:
+     * Contador correlativo: `🔄 X órdenes`.
+     * Insignia dorada de fidelización: `⭐ Recurrente / Frecuente` cuando registra 2 o más visitas.
+
+---
+
+## 7. Discriminación Bicanal de Egresos en Taller (Efectivo vs. QR)
+*(Estado: **COMPLETADO**)*
+
+1. **Modelos de Datos ([`workshop/models.py`](file:///d:/proyectoPF/phone-fix-backend/workshop/models.py)):**
+   * En `RepairPartItem`: Campo `payment_method` con opciones `EFECTIVO` (Caja Chica) y `QR` (Transferencia bancaria / QR).
+   * En `RepairOrder`: Campo `deposit_refund_method` con opciones `EFECTIVO` y `QR`.
+   * Migración `0004` aplicada exitosamente en PostgreSQL.
+
+2. **Imputación de Piezas en Taller ([`AddLineItemModal.tsx`](file:///d:/proyectoPF/phone-fix-frontend/src/features/workshop/components/AddLineItemModal.tsx)):**
+   * Al registrar un repuesto externo de caseta, el técnico o cajero selecciona el canal de egreso:
+     * `[ 💵 Efectivo (Caja Chica) ]`
+     * `[ 📱 QR / Banco Empresa ]`
+
+3. **Devolución de Seña ([`RepairDetailModal.tsx`](file:///d:/proyectoPF/phone-fix-frontend/src/features/workshop/components/RepairDetailModal.tsx)):**
+   * Al devolver un anticipo por un equipo no reparable o rechazado, se define si el reintegro se realiza en billetes físicos o por transferencia QR.
+
+4. **Reflejo en Libro Contable ([`AccountingLedgerPage.tsx`](file:///d:/proyectoPF/phone-fix-frontend/src/features/sales/pages/AccountingLedgerPage.tsx)):**
+   * Columnas separadas en la tabla: `Efec. In (+)`, `QR In (+)`, `Egreso Ef. (-)`, `Egreso QR (-)`, `Neto (Bs.)`.
+   * Garantiza que la gaveta física de billetes nunca se descuadre cuando un repuesto se compra con dinero digital de la cuenta bancaria.

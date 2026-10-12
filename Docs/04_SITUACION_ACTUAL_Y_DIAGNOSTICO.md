@@ -1,54 +1,60 @@
 # 04. Situación Actual y Diagnóstico del Código
 
-Tras una auditoría completa del código después de 6 meses de inactividad (último commit del 11 de abril de 2026), se presenta el estado de situación, el desfase entre capas y las deudas técnicas detectadas.
+Este documento resume la radiografía técnica del sistema **PhoneFix**, el estado de convergencia entre capas y el cierre total de las deudas técnicas identificadas durante la reactivación del proyecto.
 
 ---
 
-## 1. Resumen de Estado
+## 1. Resumen de Estado Actual (100% Integrado)
 
 | Componente | Nivel de Avance | Estado Real |
-| :--- | :--- | :--- |
-| **Infraestructura Docker** | 90% | Contenedores operativos para Postgres, Backend y Frontend. |
-| **Autenticación (JWT + GraphQL)**| 85% | Login funcional entre React y Django Strawberry GraphQL. |
-| **UI / UX (Frontend)** | 80% | Pantallas, modales y navegación construidos con alta calidad visual. |
-| **Modelos de Datos (Backend)** | 15% | Solo existe `staff.User`. El resto de apps están vacías. |
-| **API GraphQL (Backend)** | 20% | Solo existen query `hello` y mutación `login`. |
-| **Conexión Frontend - Backend** | 20% | Solo el Login está conectado; el resto opera con Mocks. |
+| :--- | :---: | :--- |
+| **Infraestructura Docker** | 100% | 4 Contenedores operativos (`backend_pfix`, `frontend_pfix`, `db_pfix`, `minio_pfix`). |
+| **Autenticación (JWT + GraphQL)** | 100% | Login funcional entre React y Django Strawberry GraphQL con RBAC. |
+| **UI / UX (Frontend)** | 100% | Pantallas Cyber-Clean, modales contextuales, navegación por fases y vista extendida. |
+| **Modelos de Datos (Backend)** | 100% | Modelos completos en PostgreSQL para `clients`, `workshop`, `inventory`, `sales` y `staff`. |
+| **API GraphQL (Backend)** | 100% | Queries y Mutations completas con resolvers robustos, atomicidad y validaciones. |
+| **Conexión Frontend - Backend** | 100% | **Cero datos Mock.** Todas las vistas operan con Apollo Client (`useQuery`, `useMutation`). |
+| **Almacenamiento S3 (MinIO)** | 100% | Generación de facturas PDF con ReportLab y fotos de recepción almacenadas en MinIO. |
 
 ---
 
-## 2. El Desfase Arquitectónico ("The Gap")
+## 2. Resolución del Desfase Arquitectónico ("The Gap Resolved")
 
-El proyecto experimentó un avance acelerado en el **diseño de interfaz y experiencia de usuario (Frontend)** antes de que los modelos del **Backend** fueran completados.
+El desfase histórico donde el Frontend utilizaba datos simulados (`MOCK_*`) mientras el Backend carecía de modelos ha sido **completamente superado**:
 
 ```mermaid
 graph TD
-    subgraph Frontend Realizado
+    subgraph Frontend Real (React 19 + Apollo Client)
         F1[LoginPage -> CONECTADO VÍA GRAPHQL]
-        F2[NewOrderPage -> Simulada con useState]
-        F3[WorkshopPage -> Usa MOCK_REPAIRS]
-        F4[InventoryPage -> Usa MOCK_INVENTORY]
-        F5[PosPage -> Usa MOCK_PRODUCTS]
-        F6[CashClosePage -> Variables estáticas]
-        F7[ClientsPage -> Usa MOCK_CLIENTS]
+        F2[NewOrderPage -> Mutaciones createClient y createRepairOrder]
+        F3[WorkshopPage -> Query repairOrders en 4 Fases Operativas]
+        F4[InventoryPage -> Query products y gestión de catálogo]
+        F5[PosPage -> Mutación createSale con soporte bicanal y venta libre]
+        F6[CashClosePage -> Query drawerSummary y mutación createCashClose]
+        F7[ClientsPage -> Query clients con contador y detección de recurrencia]
+        F8[AccountingLedgerPage -> Query accountingLedger inmutable y exportación CSV]
     end
 
-    subgraph Backend Implementado
-        B1[staff.User -> Modelo en PostgreSQL]
-        B2[login Mutation -> Genera JWT]
-        B3[clients -> Sin modelos]
-        B4[workshop -> Sin modelos]
-        B5[inventory -> Sin modelos]
-        B6[sales -> Sin modelos]
-        B7[reception -> Sin modelos]
+    subgraph Backend Operativo (Django 5 + Strawberry)
+        B1[staff.User y Permisos RBAC]
+        B2[clients.Client con unicidad por C.I.]
+        B3[workshop.RepairOrder y workshop.RepairPartItem]
+        B4[workshop.Supplier y Directorio de Casetas]
+        B5[inventory.Product con control progresivo]
+        B6[sales.Sale y sales.SaleItem]
+        B7[sales.CashClose y Libro Contable General]
     end
 
-    F1 <== "Conexión Real" ==> B2
-    F2 -. "Desconectado" .- B7
-    F3 -. "Desconectado" .- B4
-    F4 -. "Desconectado" .- B5
-    F5 -. "Desconectado" .- B6
-    F7 -. "Desconectado" .- B3
+    F1 <== "Autenticación JWT" ==> B1
+    F2 <== "Recepción & Clientes" ==> B2
+    F2 <== "Registro de Orden" ==> B3
+    F3 <== "Gestión de Taller & Piezas" ==> B3
+    F3 <== "Proveedores Externos" ==> B4
+    F4 <== "Inventario de Almacén" ==> B5
+    F5 <== "Venta Mostrador POS" ==> B6
+    F6 <== "Arqueo de Caja Bicanal" ==> B7
+    F7 <== "Directorio de Clientes" ==> B2
+    F8 <== "Auditoría Financiera Inmutable" ==> B7
 ```
 
 ---
@@ -56,44 +62,42 @@ graph TD
 ## 3. Radiografía por Capas
 
 ### A. Capa Backend (`phone-fix-backend`)
-* **Lo que está funcionando:**
-  * Dockerfile con Python 3.11 y dependencias instaladas.
-  * Modelo `staff.User` extendiendo `AbstractUser` con los roles `ADMIN` y `STAFF`.
-  * Generación y validación de tokens JWT mediante `PyJWT`.
-  * Esquema de Strawberry GraphQL exponiendo `hello` y `login`.
-* **Lo que está pendiente:**
-  * `clients/models.py`: Sin tablas de Clientes ni Teléfonos.
-  * `inventory/models.py`: Sin tablas de Productos, Categorías ni Stock.
-  * `reception/models.py` y `workshop/models.py`: Sin tablas de Órdenes de Servicio, Dispositivos ni Partes/Repuestos asignados.
-  * `sales/models.py`: Sin tablas de Ventas mostrador, Ítems de venta ni Cierres de caja diarios.
-  * `core/schema.py`: Sin queries (`allClients`, `allRepairs`, `allProducts`) ni mutations (`createRepairOrder`, `updateRepairStatus`, `createProduct`, etc.).
+* **Estado:** Totalmente funcional y verificado.
+* **Módulos implementados:**
+  1. `clients`: Modelo `Client`, mutación `create_client` (con `get_or_create` por C.I. o celular para evitar duplicados), campos `repairs_count` e `is_recurrent`.
+  2. `workshop`: Modelos `Device`, `RepairOrder`, `RepairPartItem` y `Supplier`. Soporte para 4 fases de taller, techo presupuestario (`cost_cash_out`), selector de canal de pago (`payment_method` en piezas y `deposit_refund_method` en órdenes), abandono (> 90 días) y facturación PDF en MinIO.
+  3. `inventory`: Modelo `Product` con categorías (`REPUESTO`, `ACCESORIO`, etc.), control progresivo de stock (`is_stock_managed`) y catálogo maestro de marcas y modelos.
+  4. `sales`: Modelo `Sale`, `SaleItem`, `CashClose` y resolver de `accounting_ledger` inmutable que consolida ingresos y egresos separando Efectivo y QR.
+  5. `staff`: Sistema de usuarios extendiendo `AbstractUser` con roles (`ADMIN`, `STAFF`) y permisos granulares de seguridad RBAC.
 
 ---
 
 ### B. Capa Frontend (`phone-fix-frontend`)
-* **Lo que está funcionando:**
-  * La pantalla de inicio de sesión (`LoginPage`) se conecta al backend mediante Apollo Client y almacena el JWT en `localStorage`.
-  * El sistema de rutas (`react-router-dom`) valida la sesión y restringe las vistas de administración (`/ventas`, `/caja`, `/clientes`).
-  * Las interfaces están completamente diseñadas:
-    * Selector interactivo de patrón táctil para Android (`PatternLock`).
-    * Modal de detalle técnico con pestañas de costos, WhatsApp y asignación de piezas (`RepairDetailModal`).
-    * Selector dinámico entre repuesto interno de almacén y compra externa a proveedor (`AddLineItemModal`).
-    * Catálogo interactivo de Punto de Venta (POS) con carrito y cálculo de totales.
-    * Módulo de arqueo y cierre de caja con cálculo de diferencias y balance.
-* **Lo que está pendiente:**
-  * Reemplazar los arrays estáticos (`MOCK_REPAIRS`, `MOCK_INVENTORY`, `MOCK_CLIENTS`, `MOCK_PRODUCTS`) por hooks `useQuery` y `useMutation` de `@apollo/client`.
+* **Estado:** 100% Reactivo y conectado a la API GraphQL.
+* **Componentes clave integrados:**
+  1. `NewOrderPage`: Recepción con autocompletado de clientes recurrentes al tipear C.I., patrón visual de 9 puntos (`PatternLock`), presets de marcas y cotización inmediata o diferida.
+  2. `WorkshopPage`: Dividida en **4 fases operativas**:
+     - *1. En Diagnóstico / Revisión*
+     - *2. En Reparación / Mesa de Trabajo*
+     - *3. Listos para Retiro / Por Entregar*
+     - *4. Entregados & Historial*
+  3. `RepairDetailModal` & `AddLineItemModal`: Gestión de repuestos con control de techo presupuestario (`Budget Cap`), selector de canal de egreso (`Efectivo` vs `QR`), generación de PDF y liquidación final.
+  4. `AccountingLedgerPage`: Libro contable inmutable con 5 tarjetas KPI bicanal, tabla de 11 columnas con egresos discriminados y exportación a Excel en formato UTF-8 BOM.
+  5. `ClientsPage`: Directorio de clientes con contador correlativo de visitas (`🔄 X órdenes`) y badge dorado `⭐ Cliente Recurrente`.
 
 ---
 
-## 4. Deudas Técnicas y Estado de Corrección
+## 4. Deudas Técnicas Resueltas
 
-1. **Nombre erróneo de archivo de entorno:**
-   * ✅ **RESUELTO:** Renombrado a `phone-fix-frontend/.env.development` y creado `.env` maestro en la raíz.
-2. **URL del backend quemada en Frontend:**
-   * ✅ **RESUELTO:** En `phone-fix-frontend/src/lib/apolloClient.ts`, se dinamizó con `import.meta.env.VITE_API_URL`.
-3. **Almacenamiento de Fotos y Evidencias:**
-   * ✅ **RESUELTO EN INFRAESTRUCTURA:** Contenedor `minio_pfix` integrado a `docker-compose.yml` para almacenamiento privado S3.
-4. **Desalineación de Zona Horaria:**
-   * ⏳ **PENDIENTE EN CÓDIGO DJANGO:** En `phone-fix-backend/core/settings.py` cambiar `TIME_ZONE = "America/Caracas"` a `America/La_Paz` (se aplicará al iniciar Fase 2).
-5. **Reescritura de Modelos y Frontend:**
-   * ⏳ **PENDIENTE:** Modelar los campos en Django ORM y reescribir la UI de React 19 con la paleta oficial (Negro/Cian/Blanco).
+1. **Configuración de Variables de Entorno:**
+   * ✅ **RESUELTO:** Creación de `.env` maestro en la raíz y `.env.development` en el frontend apuntando a `http://localhost:8000/graphql`.
+2. **Infraestructura de Almacenamiento S3 (MinIO):**
+   * ✅ **RESUELTO:** Contenedor `minio_pfix` integrado a la red Docker con alias `minio` para compatibilidad estricta con `botocore`.
+3. **Zona Horaria de Bolivia:**
+   * ✅ **RESUELTO:** Configurado `TIME_ZONE = "America/La_Paz"` en `core/settings.py`.
+4. **Eliminación de Mocks en Frontend:**
+   * ✅ **RESUELTO:** Todos los archivos de mocks locales fueron reemplazados por llamadas nativas de Apollo Client conectadas a PostgreSQL.
+5. **Doble Cotización y Descuadre de Presupuesto:**
+   * ✅ **RESUELTO:** Separación estricta entre `technician_notes` y `authorized_work`, más barra de auditoría de presupuesto máximo aprobado.
+6. **Descuadre de Caja Chica por Pagos QR:**
+   * ✅ **RESUELTO:** Discriminación obligatoria del canal de egreso (`EFECTIVO` vs `QR`) en repuestos y devoluciones de seña.

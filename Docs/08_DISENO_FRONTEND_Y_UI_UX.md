@@ -128,27 +128,30 @@ Organización visual en **Grid Responsivo Adaptable** (3 columnas en pantallas g
 
 ---
 
-### D. Taller Activo y Gestión de Reparaciones (`WorkshopPage.tsx`)
-* **Filtros por Pestañas:**
-  * `Todos` | `En Diagnóstico` | `En Proceso` | `Listos en Espera` | `Entregados` | `⚠️ Plazo Vencido (>90d)`.
-* **Tarjetas de Reparación:**
-  * Tarjetas oscuras `#111726` con borde que cambia de color según el estado:
-    * *Diagnóstico:* Borde naranja sutil.
-    * *En Proceso:* Borde cian eléctrico.
-    * *Listo en Espera:* Borde esmeralda brillante.
-    * *Plazo > 90 días:* Borde fucsia/rojo neón con botón exclusivo para Admin: **`Declarar Abandono / Absorber Activo`**.
-  * Desglose visible de: Dispositivo, Cliente, Falla, Anticipo recibido y Saldo pendiente.
-  * Botón directo con icono de WhatsApp que genera el mensaje automático `wa.me/591...`.
+### D. Taller Activo y Gestión de Reparaciones (`WorkshopPage.tsx` y `WorkshopTableView.tsx`)
+* **Layout de Tabla Ancha sin Saltos de Línea:**
+  * Contenedor con `min-w-[1300px]` y desplazamiento horizontal suave.
+  * Columna de Ticket con `whitespace-nowrap` y padding balanceado, garantizando que el número correlativo (`#TKT-XXX`) y la marca/modelo se visualicen en una sola línea pulcra.
+  * Centrado visual y badges de estado cromáticos unificados sin desfasajes de grilla.
+* **Flujo Operativo en 4 Fases Claras:**
+  1. **Fase 1: En Diagnóstico / Revisión:**
+     * Enfocado en inspección física, checklist de ingreso, notas reservadas para el personal y fotos en MinIO.
+     * **Separación de responsabilidades:** Se ocultan intencionalmente las tarjetas de liquidación de saldo y facturación para no saturar al técnico en fases tempranas.
+     * Muestra el presupuesto inicial acordado y botón de contacto WhatsApp para enviar cotización formal post-desarmado.
+  2. **Fase 2: En Reparación / Mesa de Trabajo:**
+     * Visualización detallada de repuestos y piezas solicitadas.
+     * **Barra de Auditoría Presupuestaria (`Budget Cap`):** Indicador visual en tiempo real que alerta si la suma de repuestos cotizados supera el presupuesto general aprobado.
+     * Selector de caseta externa con discriminación de canal de egreso (`💵 Efectivo / Caja Chica` vs `📱 QR / Banco Empresa`).
+  3. **Fase 3: Listos para Retiro / Por Entregar:**
+     * Activación de la tarjeta de liquidación final.
+     * Selector de período de garantía con **`3 Semanas (Estándar)`** seleccionado por defecto (ajustable por Admin a 3 meses o sin garantía).
+     * Registro de cobro del saldo pendiente discriminado en Efectivo y/o QR.
+     * Generación e impresión instantánea de factura/recibo formal en PDF mediante **ReportLab + MinIO**.
+  4. **Fase 4: Entregados & Historial:**
+     * Registro inmutable de equipos devueltos al cliente, fecha y hora de entrega, garantía vigente y descarga de comprobantes históricos.
 * **Modal de Detalle Técnico (`RepairDetailModal.tsx`):**
-  * Pestaña **General:** Datos del equipo, patrón de desbloqueo interactivo, fotos en MinIO y notas técnicas.
-  * Pestaña **Costos y Repuestos:**
-    * Tabla de repuestos imputados (nombre, costo de caja chica, precio cobrado al cliente).
-    * Selector de procedencia: `PhoneFix Propio` vs `Proveedor / Caseta Externa` (con modal rápido para añadir nueva caseta).
-    * Cálculo automático en tiempo real: $\text{Ganancia Neta} = \text{Total} - \text{Caja Chica}$.
-  * Pestaña **Garantía y Entrega:**
-    * Selector de garantía con **`3 Semanas (Estándar)`** seleccionado por defecto.
-    * Opción de cambio por el Admin a `3 Meses`, `Sin Garantía` o días personalizados.
-    * Desglose de liquidación de saldo final: selector de monto en Efectivo y monto por QR.
+  * Diseñado con 4 pestañas modulares (`Diagnóstico`, `Reparación & Repuestos`, `Liquidación & Entrega`, `Historial & Auditoría`).
+  * Área de **Observaciones Internas del Personal**: campo exclusivo para técnicos con icono de candado, protegiendo notas sensibles sobre daños preexistentes o contingencias en mesa de soldadura.
 
 ---
 
@@ -189,14 +192,32 @@ Solución definitiva a los problemas de altura y visualización:
 
 ---
 
-### G. Directorio y Formulario de Proveedores (`SuppliersModal.tsx`)
-* Modal emergente con diseño dark elegante para registrar:
+### G. Directorio y Formulario de Proveedores (`SuppliersPage.tsx` y `SupplierModal.tsx`)
+* Directorio dedicado con tarjetas Dark Tech para gestionar casetas de Montero y Santa Cruz:
   * **Nombre de la Tienda / Proveedor** (Obligatorio).
-  * **Lugar / Mercado** (Comercial Chiriguano, La Ramada, Montero).
+  * **Lugar / Mercado** (Comercial Chiriguano, La Ramada, Montero Central).
   * **Nº de Caseta / Pasillo**.
   * **Nombre del Técnico / Contacto**.
-  * **Celular de Referencia** (con botón de prueba de WhatsApp).
+  * **Celular de Referencia** con botón directo a WhatsApp.
   * **Especialidad o Notas**.
+
+---
+
+### H. Libro Contable General Bicanal (`AccountingLedgerPage.tsx`)
+* **5 Tarjetas KPI con Iluminación Neón:**
+  1. *Total Ingresos (+):* Fondo Esmeralda Neón.
+  2. *Total Egresos (-):* Fondo Rosa Neón.
+  3. *Balance Neto:* Fondo Cian Neón con cálculo dinámico.
+  4. *Caja Efectivo Disponible:* Gaveta física real en bolivianos.
+  5. *Banco / QR Disponible:* Saldo digital en cuentas bancarias.
+* **Tabla Bicanal de 11 Columnas:** Detalle cronológico inmutable con origen de operación, ticket de taller correlativo, entrada efectivo, entrada QR, salida efectivo, salida QR y saldo neto acumulado.
+* **Filtros Temporales y Exportación:** Selector de rango de fechas y botón de descarga directa a Excel (.csv con soporte UTF-8 BOM).
+
+---
+
+### I. Gestión de Clientes y Fidelización (`ClientsPage.tsx` y `NewOrderPage.tsx`)
+* **Detección Instantánea por C.I. en Recepción:** Al tipear el documento del cliente en la nueva orden, un banner inteligente notifica si el cliente ya existe y permite precargar sus datos con un solo clic.
+* **Contador de Visitas y Badges:** Cada cliente en el directorio muestra un contador de reparaciones (`🔄 X órdenes`) y una insignia dorada de fidelización (`⭐ Cliente Recurrente`) cuando registra 2 o más visitas al taller.
 
 ---
 

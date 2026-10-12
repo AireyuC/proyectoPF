@@ -18,42 +18,58 @@ Instrucciones para levantar el proyecto localmente mediante Docker Compose (con 
 
 Todo el ecosistema se gestiona a través del archivo centralizado [`.env`](file:///d:/proyectoPF/.env) en la raíz del proyecto.
 
-### A. Iniciar los contenedores
-Desde la raíz del repositorio (`d:\proyectoPF`):
+### A. Iniciar y Reconstruir los Contenedores
+Para compilar y aplicar cualquier cambio en caliente de forma limpia y garantizada en Docker:
 
 ```bash
-docker-compose up --build
+# Opción recomendada directa:
+docker compose up -d --build
+
+# O en caso de requerir un reinicio completamente limpio de red y procesos:
+docker compose down
+docker compose up -d --build
 ```
 
-Esto levantará automáticamente 4 servicios:
+Esto levantará automáticamente los 4 servicios interconectados:
 1. `db_pfix`: Servidor PostgreSQL 15 en el puerto `5432`.
-2. `minio_pfix`: Servidor MinIO Object Storage (API en `:9000` y Consola Web en `:9001`).
-3. `backend_pfix`: Ejecutará migraciones y arrancará el servidor Django en el puerto `8000`.
-4. `frontend_pfix`: Servidor de desarrollo Vite en el puerto `5173`.
+2. `minio_pfix`: Servidor MinIO Object Storage (API S3 en `:9000` y Consola Web en `:9001`).
+3. `backend_pfix`: Servidor Django 5 + Strawberry GraphQL en el puerto `8000`.
+4. `frontend_pfix`: Servidor de desarrollo Vite + React 19 en el puerto `5173`.
 
 ---
 
-### B. Crear el Usuario Administrador Inicial
-Para poder iniciar sesión en la aplicación y en el panel de Django Admin:
+### B. Credenciales de Acceso y Usuario Administrador
 
-1. Abrir una nueva terminal.
-2. Identificar el contenedor de backend (`docker ps`).
-3. Ejecutar:
-   ```bash
-   docker exec -it proyectopf-backend_pfix-1 python manage.py createsuperuser
-   ```
-4. Ingresar username, email y contraseña.
-5. Asignar el rol `ADMIN` ingresando a la shell de Django:
-   ```bash
-   docker exec -it proyectopf-backend_pfix-1 python manage.py shell
-   ```
-   ```python
-   from staff.models import User
-   u = User.objects.get(username="tu_usuario")
-   u.role = User.Roles.ADMIN
-   u.save()
-   exit()
-   ```
+#### 1. Credencial de Desarrollo Preconfigurada:
+* **Usuario:** `aireyu`
+* **Contraseña:** `admin123`
+* **Rol:** `ADMIN` (acceso irrestricto a taller, inventario, ventas, libro contable y auditoría).
+
+#### 2. Crear Superusuario Adicional o Alternativo:
+Si se requiere generar un nuevo administrador desde la consola Docker:
+
+```bash
+# Ejecución directa en el contenedor backend_pfix:
+docker compose exec backend_pfix python manage.py createsuperuser
+```
+
+Y para asignarle rol administrativo en el modelo de negocio:
+```bash
+docker compose exec backend_pfix python manage.py shell
+```
+```python
+from staff.models import User
+u = User.objects.get(username="tu_nuevo_usuario")
+u.role = User.Roles.ADMIN
+u.save()
+exit()
+```
+
+#### 3. Ejecutar Migraciones de Base de Datos:
+Cuando se introduzcan nuevos campos o modelos Django:
+```bash
+docker compose exec backend_pfix python manage.py migrate
+```
 
 ---
 
