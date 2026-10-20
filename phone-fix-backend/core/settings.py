@@ -101,10 +101,10 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # CORS
-# Desarrollo Local:
-# CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=["http://localhost:5173", "http://localhost:3000"])
-# Entorno Desplegado (VPS):
-CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=["http://95.111.245.9", "http://95.111.245.9:5173", "http://localhost:5173"])
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
+else:
+    CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=["http://95.111.245.9", "http://95.111.245.9:5173", "http://localhost:5173"])
 
 # Custom User Model
 AUTH_USER_MODEL = 'staff.User'

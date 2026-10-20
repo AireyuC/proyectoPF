@@ -2,8 +2,28 @@ import { ApolloClient, InMemoryCache, createHttpLink } from '@apollo/client';
 import { setContext } from '@apollo/client/link/context';
 
 // URL del backend GraphQL obtenida dinámicamente de las variables de entorno
+// Si se accede desde un dispositivo móvil en la misma red Wi-Fi, resuelve dinámicamente la IP del host
+const getApiUri = () => {
+  const envUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/graphql/';
+  if (typeof window !== 'undefined') {
+    const currentHost = window.location.hostname;
+    if (currentHost && currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
+      try {
+        const parsed = new URL(envUrl);
+        if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+          parsed.hostname = currentHost;
+          return parsed.toString();
+        }
+      } catch {
+        return `http://${currentHost}:8000/graphql/`;
+      }
+    }
+  }
+  return envUrl;
+};
+
 const httpLink = createHttpLink({
-  uri: import.meta.env.VITE_API_URL || 'http://localhost:8000/graphql/',
+  uri: getApiUri(),
 });
 
 // Link de autenticación para inyectar el JWT en cada petición
